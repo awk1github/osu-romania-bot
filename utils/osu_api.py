@@ -131,3 +131,30 @@ class OsuAPI:
         return await OsuAPI.api_get(
             f"users/{user_id}/scores/pinned"
         )
+    
+    # ------------------------
+    # BEATMAPS
+    # ------------------------
+
+    @staticmethod
+    async def get_beatmap(beatmap_id: int | str):
+        return await OsuAPI.api_get(
+            f"beatmaps/{beatmap_id}"
+    )
+
+    # ------------------------
+    # BEATMAP SCORES
+    # ------------------------
+
+    @staticmethod
+    async def get_user_beatmap_score(
+        beatmap_id: int | str,
+        user_id: int | str
+    ) -> dict | None:
+        """
+        Returns a user's best score on a specific beatmap.
+        """
+
+        return await OsuAPI.api_get(
+            f"beatmaps/{beatmap_id}/scores/users/{user_id}"
+        )

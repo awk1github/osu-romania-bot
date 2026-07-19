@@ -1,8 +1,8 @@
 # 🇷🇴 osu!Romania Discord Bot
 
-A modern Discord bot built for the **osu!Romania** community.
+A Discord bot built for the **osu!Romania** community.
 
-The bot combines server moderation with deep osu! integration, allowing members to link their accounts, view profiles, recent scores, top plays and compete on a server-wide leaderboard.
+The bot contains server moderation functionalities, but I also added some osu! commands, allowing members to link their accounts, view profiles, recent scores, top plays and a server leaderboard.
 
 ---
 
@@ -22,12 +22,6 @@ The bot combines server moderation with deep osu! integration, allowing members 
 - `/recent` — View a player's most recent play
 - `/top` — Display a player's top plays
 - `/leaderboard` — Server-wide linked player leaderboard
-
----
-
-## 📷 Preview
-
-> *(Screenshots coming soon)*
 
 ---
 
@@ -73,64 +67,6 @@ Discord Bot/
 
 ---
 
-## 🚀 Installation
-
-Clone the repository:
-
-```bash
-git clone https://github.com/awk1github/osu-romania-bot.git
-cd osu-romania-bot
-```
-
-Create a virtual environment:
-
-```bash
-python -m venv .venv
-```
-
-Activate it:
-
-### Windows
-
-```bash
-.venv\Scripts\activate
-```
-
-### Linux / macOS
-
-```bash
-source .venv/bin/activate
-```
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## ⚙️ Environment Variables
-
-Create a `.env` file in the project root.
-
-```env
-DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN
-
-OSU_CLIENT_ID=YOUR_OSU_CLIENT_ID
-OSU_CLIENT_SECRET=YOUR_OSU_CLIENT_SECRET
-```
-
----
-
-## ▶️ Running the Bot
-
-```bash
-python main.py
-```
-
----
-
 ## 📋 Slash Commands
 
 ### Moderation
@@ -170,18 +106,6 @@ The following files are ignored by Git:
 - SQLite database
 
 Never share your Discord token or osu! client secret.
-
----
-
-## 📈 Roadmap
-
-- [ ] Player comparison (`/compare`)
-- [ ] Beatmap lookup (`/beatmap`)
-- [ ] Performance graphs
-- [ ] Automatic profile cache refresh
-- [ ] Tournament utilities
-- [ ] Multiplayer support
-- [ ] osu! achievements
 
 ---
 

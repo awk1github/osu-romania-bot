@@ -31,9 +31,12 @@ class OsuRomania(commands.Bot):
         extensions = [
             "cogs.moderation",
             "cogs.warnings",
+            "cogs.achievements",
+            "cogs.achievement_settings",
             "osu.profile",
             "osu.scores",
-            "osu.leaderboard"
+            "osu.leaderboard",
+            "osu.listeners",
         ]
 
         for extension in extensions:
