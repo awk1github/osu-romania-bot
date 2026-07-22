@@ -13,4 +13,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Start the bot
-CMD ["python", "main.py"]
+CMD ["sh", "-c", "python init_db.py && python main.py"]
