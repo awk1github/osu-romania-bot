@@ -5,6 +5,7 @@ import asyncio
 import discord
 from discord.ext import commands
 from discord import app_commands
+from utils.oauth_server import OAuthServer
 
 load_dotenv()
 
@@ -42,6 +43,8 @@ class OsuRomania(commands.Bot):
             await self.load_extension(extension)
             print(f"✓ Loaded {extension}")
 
+        await OAuthServer.start(self)
+        
         guild = discord.Object(id=GUILD_ID)
 
         self.tree.copy_global_to(guild=guild)

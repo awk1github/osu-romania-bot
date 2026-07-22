@@ -42,6 +42,17 @@ CREATE TABLE IF NOT EXISTS guild_settings (
     rank_1000000_plus_role_id INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS osu_oauth_states (
+    state TEXT PRIMARY KEY,
+    discord_id INTEGER NOT NULL,
+    guild_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_osu_accounts_osu_id
+ON osu_accounts (osu_id);
+
 CREATE TABLE IF NOT EXISTS osu_counties (
     osu_id INTEGER PRIMARY KEY,
     osu_username TEXT NOT NULL,
@@ -95,7 +106,6 @@ ON achievement_events (osu_id);
 CREATE INDEX IF NOT EXISTS idx_warnings_user_id
 ON warnings (user_id);
 """
-
 
 def initialize_database() -> None:
     DATABASE_DIR.mkdir(parents=True, exist_ok=True)

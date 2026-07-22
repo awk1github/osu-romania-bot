@@ -925,7 +925,7 @@ class ServerSettings(commands.Cog):
                     description=(
                         f"Welcome to **{member.guild.name}**, "
                         f"{member.mention}!\n\n"
-                        "We hope you enjoy your stay."
+                        "To have access to our server, you will need to /link your osu! account!"
                     ),
                     color=discord.Color.green(),
                 )
