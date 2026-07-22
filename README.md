@@ -91,8 +91,6 @@ Discord Bot/
 
 ## 📋 Slash Commands
 
-### Moderation
-
 ### osu!
 
 | Command | Description |

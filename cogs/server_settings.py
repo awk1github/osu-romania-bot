@@ -6,7 +6,8 @@ from discord import app_commands
 from discord.ext import commands
 
 from utils.embeds import EmbedFactory
-
+from utils.osu_api import OsuAPI
+from utils.rank_roles import RankRoleService
 
 GUILD_ID = 1473125019692564542
 
@@ -33,10 +34,7 @@ class ServerSettings(commands.Cog):
     # --------------------------------------------------
 
     def ensure_database_columns(self) -> None:
-        """
-        Create guild_settings if it does not exist and add any
-        missing server-setting columns.
-        """
+        """Create required tables and safely add missing columns."""
 
         DATABASE_PATH.parent.mkdir(
             parents=True,
@@ -57,42 +55,80 @@ class ServerSettings(commands.Cog):
                     welcome_channel_id INTEGER,
                     welcome_enabled INTEGER NOT NULL DEFAULT 0,
                     leave_channel_id INTEGER,
-                    leave_enabled INTEGER NOT NULL DEFAULT 0
+                    leave_enabled INTEGER NOT NULL DEFAULT 0,
+                    rank_roles_enabled INTEGER NOT NULL DEFAULT 0,
+                    rank_1_999_role_id INTEGER,
+                    rank_1000_9999_role_id INTEGER,
+                    rank_10000_99999_role_id INTEGER,
+                    rank_100000_999999_role_id INTEGER,
+                    rank_1000000_plus_role_id INTEGER
                 )
                 """
             )
 
+            guild_columns = {
+                row[1]
+                for row in cursor.execute(
+                    "PRAGMA table_info(guild_settings)"
+                ).fetchall()
+            }
+
+            required_guild_columns = {
+                "achievement_channel_id": "INTEGER",
+                "achievements_enabled": "INTEGER NOT NULL DEFAULT 0",
+                "autorole_id": "INTEGER",
+                "autorole_enabled": "INTEGER NOT NULL DEFAULT 0",
+                "welcome_channel_id": "INTEGER",
+                "welcome_enabled": "INTEGER NOT NULL DEFAULT 0",
+                "leave_channel_id": "INTEGER",
+                "leave_enabled": "INTEGER NOT NULL DEFAULT 0",
+                "rank_roles_enabled": "INTEGER NOT NULL DEFAULT 0",
+                "rank_1_999_role_id": "INTEGER",
+                "rank_1000_9999_role_id": "INTEGER",
+                "rank_10000_99999_role_id": "INTEGER",
+                "rank_100000_999999_role_id": "INTEGER",
+                "rank_1000000_plus_role_id": "INTEGER",
+            }
+
+            for column_name, column_type in required_guild_columns.items():
+                if column_name not in guild_columns:
+                    cursor.execute(
+                        f"ALTER TABLE guild_settings "
+                        f"ADD COLUMN {column_name} {column_type}"
+                    )
+
             cursor.execute(
-                "PRAGMA table_info(guild_settings)"
+                """
+                CREATE TABLE IF NOT EXISTS osu_counties (
+                    osu_id INTEGER PRIMARY KEY,
+                    osu_username TEXT NOT NULL,
+                    county_code TEXT NOT NULL,
+                    county_name TEXT NOT NULL,
+                    county_rank INTEGER,
+                    pp REAL,
+                    global_rank INTEGER,
+                    avatar_url TEXT,
+                    last_updated TEXT NOT NULL
+                )
+                """
             )
 
-            existing_columns = {
+            county_columns = {
                 row[1]
-                for row in cursor.fetchall()
+                for row in cursor.execute(
+                    "PRAGMA table_info(osu_counties)"
+                ).fetchall()
             }
 
-            required_columns = {
-                "achievement_channel_id": "INTEGER",
-                "achievements_enabled":
-                    "INTEGER NOT NULL DEFAULT 0",
-                "autorole_id": "INTEGER",
-                "autorole_enabled":
-                    "INTEGER NOT NULL DEFAULT 0",
-                "welcome_channel_id": "INTEGER",
-                "welcome_enabled":
-                    "INTEGER NOT NULL DEFAULT 0",
-                "leave_channel_id": "INTEGER",
-                "leave_enabled":
-                    "INTEGER NOT NULL DEFAULT 0",
+            required_county_columns = {
+                "avatar_url": "TEXT",
             }
 
-            for column_name, column_type in required_columns.items():
-                if column_name not in existing_columns:
+            for column_name, column_type in required_county_columns.items():
+                if column_name not in county_columns:
                     cursor.execute(
-                        f"""
-                        ALTER TABLE guild_settings
-                        ADD COLUMN {column_name} {column_type}
-                        """
+                        f"ALTER TABLE osu_counties "
+                        f"ADD COLUMN {column_name} {column_type}"
                     )
 
             connection.commit()
@@ -117,7 +153,13 @@ class ServerSettings(commands.Cog):
                     welcome_channel_id,
                     welcome_enabled,
                     leave_channel_id,
-                    leave_enabled
+                    leave_enabled,
+                    rank_roles_enabled,
+                    rank_1_999_role_id,
+                    rank_1000_9999_role_id,
+                    rank_10000_99999_role_id,
+                    rank_100000_999999_role_id,
+                    rank_1000000_plus_role_id
                 FROM guild_settings
                 WHERE guild_id = ?
                 """,
@@ -555,6 +597,273 @@ class ServerSettings(commands.Cog):
             )
 
         await interaction.response.send_message(
+            embed=embed,
+            ephemeral=True,
+        )
+    # --------------------------------------------------
+    # AUTO RANK ROLE
+    # --------------------------------------------------
+
+    @server.command(
+        name="rankroles",
+        description="Configure automatic osu! global-rank roles.",
+    )
+    @app_commands.describe(
+        rank_1_999="Role for players ranked 1–999.",
+        rank_1000_9999="Role for players ranked 1,000–9,999.",
+        rank_10000_99999="Role for players ranked 10,000–99,999.",
+        rank_100000_999999=(
+            "Role for players ranked 100,000–999,999."
+    ),
+        rank_1000000_plus=(
+            "Role for players ranked 1,000,000 or lower."
+    ),
+    )
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def rankroles(
+        self,
+        interaction: discord.Interaction,
+        rank_1_999: discord.Role,
+        rank_1000_9999: discord.Role,
+        rank_10000_99999: discord.Role,
+        rank_100000_999999: discord.Role,
+        rank_1000000_plus: discord.Role,
+    ) -> None:
+        guild = interaction.guild
+
+        if guild is None:
+            await interaction.response.send_message(
+                embed=EmbedFactory.error(
+                    "Server Only",
+                    "This command can only be used inside a server.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        roles = [
+            rank_1_999,
+            rank_1000_9999,
+            rank_10000_99999,
+            rank_100000_999999,
+            rank_1000000_plus,
+        ]
+
+        if len({role.id for role in roles}) != len(roles):
+            await interaction.response.send_message(
+                embed=EmbedFactory.error(
+                    "Duplicate Roles",
+                    "Each rank bracket must use a different role.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        bot_member = guild.me
+
+        for role in roles:
+            if role.is_default():
+                await interaction.response.send_message(
+                    embed=EmbedFactory.error(
+                        "Invalid Role",
+                        "The `@everyone` role cannot be used.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            if role.managed:
+                await interaction.response.send_message(
+                    embed=EmbedFactory.error(
+                        "Invalid Role",
+                        f"{role.mention} is managed by an integration.",
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            if bot_member is None or role >= bot_member.top_role:
+                await interaction.response.send_message(
+                    embed=EmbedFactory.error(
+                        "Role Too High",
+                        (
+                            f"I cannot manage {role.mention}. "
+                            "Move my bot role above all rank roles."
+                        ),
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+        with sqlite3.connect(DATABASE_PATH) as connection:
+            connection.execute(
+                """
+                INSERT INTO guild_settings (
+                    guild_id,
+                    rank_roles_enabled,
+                    rank_1_999_role_id,
+                    rank_1000_9999_role_id,
+                    rank_10000_99999_role_id,
+                    rank_100000_999999_role_id,
+                    rank_1000000_plus_role_id
+                )
+                VALUES (?, 1, ?, ?, ?, ?, ?)
+                ON CONFLICT(guild_id) DO UPDATE SET
+                    rank_roles_enabled = 1,
+                    rank_1_999_role_id =
+                        excluded.rank_1_999_role_id,
+                    rank_1000_9999_role_id =
+                        excluded.rank_1000_9999_role_id,
+                    rank_10000_99999_role_id =
+                        excluded.rank_10000_99999_role_id,
+                    rank_100000_999999_role_id =
+                        excluded.rank_100000_999999_role_id,
+                    rank_1000000_plus_role_id =
+                        excluded.rank_1000000_plus_role_id
+                """,
+                (
+                    guild.id,
+                    rank_1_999.id,
+                    rank_1000_9999.id,
+                    rank_10000_99999.id,
+                    rank_100000_999999.id,
+                    rank_1000000_plus.id,
+                ),
+            )
+
+        embed = EmbedFactory.success(
+            "Rank Roles Configured",
+            (
+                f"**1–999:** {rank_1_999.mention}\n"
+                f"**1,000–9,999:** {rank_1000_9999.mention}\n"
+                f"**10,000–99,999:** "
+                f"{rank_10000_99999.mention}\n"
+                f"**100,000–999,999:** "
+                f"{rank_100000_999999.mention}\n"
+                f"**1,000,000+:** {rank_1000000_plus.mention}"
+            ),
+        )
+
+        await interaction.response.send_message(
+            embed=embed,
+            ephemeral=True,
+        )
+
+    @server.command(
+        name="rankroles-disable",
+        description="Disable automatic osu! rank roles.",
+    )
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def rankroles_disable(
+        self,
+        interaction: discord.Interaction,
+    ) -> None:
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                embed=EmbedFactory.error(
+                    "Server Only",
+                    "This command can only be used inside a server.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        with sqlite3.connect(DATABASE_PATH) as connection:
+            connection.execute(
+                """
+                INSERT INTO guild_settings (
+                    guild_id,
+                    rank_roles_enabled
+                )
+                VALUES (?, 0)
+                ON CONFLICT(guild_id) DO UPDATE SET
+                    rank_roles_enabled = 0
+                """,
+                (interaction.guild.id,),
+            )
+
+        await interaction.response.send_message(
+            embed=EmbedFactory.success(
+                "Rank Roles Disabled",
+                "Automatic osu! rank-role updates have been disabled.",
+            ),
+            ephemeral=True,
+        )
+
+    @server.command(
+        name="rankroles-refresh",
+        description="Refresh rank roles for all linked members.",
+    )
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.checks.has_permissions(administrator=True)
+    async def rankroles_refresh(
+        self,
+        interaction: discord.Interaction,
+    ) -> None:
+        guild = interaction.guild
+
+        if guild is None:
+            await interaction.response.send_message(
+                embed=EmbedFactory.error(
+                    "Server Only",
+                    "This command can only be used inside a server.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        with sqlite3.connect(DATABASE_PATH) as connection:
+            accounts = connection.execute(
+                """
+                SELECT discord_id, osu_id
+                FROM osu_accounts
+                """
+            ).fetchall()
+
+        updated = 0
+        skipped = 0
+        failed = 0
+
+        for discord_id, osu_id in accounts:
+            member = guild.get_member(discord_id)
+
+            if member is None:
+                skipped += 1
+                continue
+
+            user = await OsuAPI.get_user(osu_id)
+
+            if user is None:
+                failed += 1
+                continue
+
+            statistics = user.get("statistics") or {}
+            global_rank = statistics.get("global_rank")
+
+            changed = await RankRoleService.update_member(
+                member,
+                global_rank,
+            )
+
+            if changed:
+                updated += 1
+            else:
+                skipped += 1
+
+        embed = EmbedFactory.success(
+            "Rank Roles Refreshed",
+            (
+                f"Roles changed: **{updated}**\n"
+                f"Already correct or absent: **{skipped}**\n"
+                f"API failures: **{failed}**"
+            ),
+        )
+
+        await interaction.followup.send(
             embed=embed,
             ephemeral=True,
         )

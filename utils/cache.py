@@ -5,7 +5,7 @@ from utils.osu_api import OsuAPI
 
 async def refresh_player(osu_id: int):
 
-    user = await OsuAPI.get_user_by_id(osu_id)
+    user = await OsuAPI.get_user(osu_id)
 
     if user is None:
         return

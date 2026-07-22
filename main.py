@@ -32,10 +32,12 @@ class OsuRomania(commands.Bot):
             "cogs.moderation",
             "cogs.achievements",
             "cogs.server_settings",
-            "osu.profile",
-            "osu.scores",
-            "osu.leaderboard",
-            "osu.listeners",
+            "cogs.county",
+            "cogs.osu.profile",
+            "cogs.osu.scores",
+            "cogs.osu.leaderboard",
+            "cogs.osu.listeners",
+            
         ]
 
         for extension in extensions:

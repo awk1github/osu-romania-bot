@@ -62,6 +62,10 @@ class ServerRecord:
         score = response.get("score")
 
         if not score:
+            scores = response.get("scores") or []
+            score = scores[0] if scores else None
+
+        if not score:
             return None
 
         # Attach information from our local database.

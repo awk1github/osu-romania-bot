@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from utils.osu_api import OsuAPI
+from utils.osu_score import format_mods, score_url
 
 import discord
 from discord.ext import commands, tasks
@@ -116,7 +117,7 @@ class Achievements(commands.Cog):
         return await OsuAPI.get_user(osu_id)
 
     async def fetch_top_10(self, osu_id: int) -> list[dict[str, Any]]:
-        return await OsuAPI.get_top(osu_id)
+        return await OsuAPI.get_top(osu_id, limit=5)
     
     def build_test_achievement_embed(
         self,
@@ -201,7 +202,7 @@ class Achievements(commands.Cog):
         embed.add_field(
             name="\u200b",
             value=(
-                "[View score](https://osu.ppy.sh/scores/osu/1234567890)"
+                "[View score](https://osu.ppy.sh/scores/1234567890)"
                 " • "
                 "[View beatmap](https://osu.ppy.sh/beatmaps/1234567)"
             ),
@@ -213,11 +214,7 @@ class Achievements(commands.Cog):
         )   
 
         return embed
-
-    @app_commands.command(
-        name="testachievement",
-        description="Send a test achievement announcement.",
-    )
+    
     @app_commands.checks.has_permissions(administrator=True)
     async def test_achievement(
             self,
@@ -330,39 +327,6 @@ class Achievements(commands.Cog):
             return None
 
         return int(row[0])
-    
-    @test_achievement.error
-    async def test_achievement_error(
-        self,
-        interaction: discord.Interaction,
-        error: app_commands.AppCommandError,
-    ) -> None:
-        if isinstance(error, app_commands.MissingPermissions):
-            message = "You need the Administrator permission to use this command."
-
-            if interaction.response.is_done():
-                await interaction.followup.send(message, ephemeral=True)
-            else:
-                await interaction.response.send_message(
-                    message,
-                    ephemeral=True,
-                )
-            return
-
-        logger.exception(
-            "Test achievement command failed.",
-            exc_info=error,
-        )
-
-        message = "An unexpected error occurred while sending the test."
-
-        if interaction.response.is_done():
-            await interaction.followup.send(message, ephemeral=True)
-        else:
-            await interaction.response.send_message(
-                message,
-                ephemeral=True,
-            )
 
     # ------------------------------------------------------------------
     # Main background loop
@@ -528,7 +492,7 @@ class Achievements(commands.Cog):
         achievements: list[Achievement] = []
         old_score_ids = set(old.top_10_ids)
 
-        for position, score in enumerate(top_scores, start=1):
+        for position, score in enumerate(top_scores[:5], start=1):
             score_id = self.to_int(score.get("id"))
 
             if score_id is None or score_id in old_score_ids:
@@ -708,7 +672,7 @@ class Achievements(commands.Cog):
         max_combo = self.to_int(score.get("max_combo"))
 
         grade = score.get("rank") or "?"
-        mods = self.format_mods(score.get("mods"))
+        mods = format_mods(score)
 
         username = profile.get("username") or linked_user.osu_username
         avatar_url = profile.get("avatar_url")
@@ -874,10 +838,10 @@ class Achievements(commands.Cog):
 
         links: list[str] = []
 
-        if score_id is not None:
-            links.append(
-                f"[View score](https://osu.ppy.sh/scores/osu/{score_id})"
-            )
+        play_url = score_url(score)
+
+        if play_url is not None:
+            links.append(f"[View score]({play_url})")
 
         if beatmap_id is not None:
             links.append(
@@ -1001,7 +965,7 @@ class Achievements(commands.Cog):
 
         top_10_ids = [
             score_id
-            for score in top_scores
+            for score in top_scores[:5]
             if (score_id := self.to_int(score.get("id"))) is not None
         ]
 
