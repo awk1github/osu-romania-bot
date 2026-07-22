@@ -6,8 +6,6 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
-import database.init_db
-
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")

@@ -73,14 +73,11 @@ class ScoreEmbed:
    
         user_stats = user.get("statistics") or {}
 
-        global_rank = (
-            score.get("rank_global")
-            if score.get("rank_global") is not None
-            else user_stats.get("global_rank")
-        )
+        global_rank = user_stats.get("global_rank")
 
         country_rank = user_stats.get("country_rank")
         country_code = user.get("country_code") or "?"
+        
         mods = format_mods(score)
         misses = miss_count(score)
         rank = str(score.get("rank") or "F").upper()

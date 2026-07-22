@@ -69,6 +69,7 @@ class Scores(commands.Cog):
 
                 osu_id = user["id"]
 
+            profile = await OsuAPI.get_user(osu_id)
             score = await OsuAPI.get_recent(osu_id)
 
             if score is None:
@@ -111,6 +112,9 @@ class Scores(commands.Cog):
                 score = full_score
 
             print(score)
+
+            if profile is not None:
+                score["user"] = profile
 
             embed = ScoreEmbed.recent(score)
             await interaction.followup.send(embed=embed)
