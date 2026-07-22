@@ -22,17 +22,14 @@ class Profile(commands.Cog):
     ) -> None:
         self.bot = bot
 
-    # --------------------------------------------------
-    # LINK
-    # --------------------------------------------------
-
-        @app_commands.command(
-            name="link",
-            description="Verify and link your osu! account.",
-        )
-        async def link(
-                interaction: discord.Interaction,
-            ) -> None:
+    @app_commands.command(
+        name="link",
+        description="Verify and link your osu! account.",
+    )
+    async def link(
+        self,
+        interaction: discord.Interaction,
+    ) -> None:
 
             if interaction.guild is None:
                 await interaction.response.send_message(
@@ -236,9 +233,5 @@ class Profile(commands.Cog):
         )
 
 
-async def setup(
-    bot: commands.Bot,
-) -> None:
-    await bot.add_cog(
-        Profile(bot)
-    )
+async def setup(bot: commands.Bot) -> None:
+    await bot.add_cog(Profile(bot))

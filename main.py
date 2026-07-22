@@ -44,7 +44,7 @@ class OsuRomania(commands.Bot):
             print(f"✓ Loaded {extension}")
 
         await OAuthServer.start(self)
-        
+
         guild = discord.Object(id=GUILD_ID)
 
         self.tree.copy_global_to(guild=guild)
