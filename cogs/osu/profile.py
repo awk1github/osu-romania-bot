@@ -75,17 +75,16 @@ class Profile(commands.Cog):
                     )
                 )
             except Exception as error:
-                print(
-                    "[OSU OAUTH] Failed to create authorization URL: "
-                    f"{type(error).__name__}: {error}"
-                )
+                import traceback
+
+                traceback.print_exc()
 
                 await interaction.response.send_message(
                     embed=EmbedFactory.error(
                         "Verification Unavailable",
                         (
-                            "The verification link could not be created. "
-                            "Please contact a server administrator."
+                            "The verification link could not be created.\n\n"
+                            f"```text\n{type(error).__name__}: {error}\n```"
                         ),
                     ),
                     ephemeral=True,
