@@ -31,9 +31,9 @@ class Profile(commands.Cog):
             description="Verify and link your osu! account.",
         )
         async def link(
-            self,
-            interaction: discord.Interaction,
-        ) -> None:
+                interaction: discord.Interaction,
+            ) -> None:
+
             if interaction.guild is None:
                 await interaction.response.send_message(
                     embed=EmbedFactory.error(
