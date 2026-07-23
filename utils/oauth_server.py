@@ -9,6 +9,7 @@ import aiohttp
 from aiohttp import web
 import discord
 from discord.ext import commands
+from utils.rank_roles import RankRoleService
 
 
 DATABASE_PATH = (
@@ -46,6 +47,7 @@ class OAuthServer:
         cls.bot = bot
 
         app = web.Application()
+
         app.router.add_get("/", cls.health_check)
         app.router.add_get("/osu/callback", cls.osu_callback)
 
@@ -218,14 +220,29 @@ class OAuthServer:
             discord_id=discord_id,
         )
 
+        statistics = osu_user.get("statistics") or {}
+        global_rank = cls._to_int(statistics.get("global_rank"))
+
+        rank_role_result = await cls._grant_rank_role(
+            guild_id=guild_id,
+            discord_id=discord_id,
+            global_rank=global_rank,
+        )
+
         if role_result is None:
             role_message = (
                 "Your account was linked, but the Member role could not be "
                 "assigned automatically. Please contact an administrator."
             )
+        elif rank_role_result is None:
+            role_message = (
+                "Your Member role was assigned, but your osu! rank role "
+                "could not be updated automatically. You can now return "
+                "to Discord."
+            )
         else:
             role_message = (
-                "Your Member role has been assigned. "
+                "Your Member role and osu! rank role have been updated. "
                 "You can now return to Discord."
             )
 
@@ -478,6 +495,45 @@ class OAuthServer:
             return None
 
         return True
+
+    @classmethod
+    async def _grant_rank_role(
+        cls,
+        guild_id: int,
+        discord_id: int,
+        global_rank: int | None,
+    ) -> bool | None:
+        if cls.bot is None or global_rank is None:
+            return None
+
+        guild = cls.bot.get_guild(guild_id)
+
+        if guild is None:
+            return None
+
+        member = guild.get_member(discord_id)
+
+        if member is None:
+            try:
+                member = await guild.fetch_member(discord_id)
+            except (
+                discord.NotFound,
+                discord.Forbidden,
+                discord.HTTPException,
+            ):
+                return None
+
+        try:
+            return await RankRoleService.update_member(
+                member,
+                global_rank,
+            )
+        except Exception as error:
+            print(
+                "[OSU OAUTH] Rank role assignment failed: "
+                f"{type(error).__name__}: {error}"
+            )
+            return None
 
     @staticmethod
     def _to_int(value: Any) -> int | None:
