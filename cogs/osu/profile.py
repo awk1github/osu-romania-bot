@@ -1,4 +1,5 @@
 import sqlite3
+import os
 
 import discord
 from discord import app_commands
@@ -10,6 +11,9 @@ from utils.osu_api import OsuAPI
 from utils.osu_embed import OsuEmbed
 from views.profile import ProfileView
 from utils.osu_oauth import OsuOAuth
+from utils.rank_roles import RankRoleService
+
+MEMBER_ROLE_ID = int(os.getenv("MEMBER_ROLE_ID", "0"))
 
 
 DATABASE_PATH = "database/bot.db"
@@ -123,6 +127,69 @@ class Profile(commands.Cog):
                 view=view,
                 ephemeral=True,
             )
+
+    @app_commands.command(
+        name="unlink",
+        description="Unlink your osu! account."
+    )
+    async def unlink(
+        self,
+        interaction: discord.Interaction
+    ):
+        user = interaction.user
+
+        with sqlite3.connect(DATABASE_PATH) as connection:
+            cursor = connection.cursor()
+
+            result = cursor.execute(
+                """
+                SELECT osu_id
+                FROM osu_accounts
+                WHERE discord_id = ?
+                """,
+                (user.id,)
+            ).fetchone()
+
+            if result is None:
+                await interaction.response.send_message(
+                    "You don't have a linked osu! account.",
+                    ephemeral=True
+                )
+                return
+
+            cursor.execute(
+                """
+                DELETE FROM osu_accounts
+                WHERE discord_id = ?
+                """,
+                (user.id,)
+            )
+
+            connection.commit()
+
+        if isinstance(user, discord.Member):
+            # Remove Member role
+            member_role = interaction.guild.get_role(MEMBER_ROLE_ID)
+
+            if member_role and member_role in user.roles:
+                try:
+                    await user.remove_roles(
+                        member_role,
+                        reason="osu! account unlinked"
+                    )
+                except discord.Forbidden:
+                    pass
+
+            # Remove rank role
+            await RankRoleService.update_member(
+                user,
+                None
+            )
+
+        await interaction.response.send_message(
+            "Your osu! account has been unlinked successfully.",
+            ephemeral=True
+        )
     # --------------------------------------------------
     # PROFILE
     # --------------------------------------------------
