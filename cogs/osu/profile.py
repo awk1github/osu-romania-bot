@@ -200,22 +200,23 @@ class Profile(commands.Cog):
         description="View an osu! profile.",
     )
     @app_commands.describe(
-        username=(
-            "The osu! username to view. "
-            "Leave empty to view your linked account."
-        ),
+        username="The osu! username to view.",
+        member="View the linked osu! account of a Discord member."
     )
+
     async def profile(
         self,
         interaction: discord.Interaction,
         username: str | None = None,
+        member: discord.Member | None = None,
     ) -> None:
         await interaction.response.defer()
 
         if username is None:
-            with sqlite3.connect(
-                DATABASE_PATH
-            ) as connection:
+
+            target = member or interaction.user
+
+            with sqlite3.connect(DATABASE_PATH) as connection:
                 cursor = connection.cursor()
 
                 cursor.execute(
@@ -224,23 +225,28 @@ class Profile(commands.Cog):
                     FROM osu_accounts
                     WHERE discord_id = ?
                     """,
-                    (interaction.user.id,),
+                    (target.id,),
                 )
 
                 row = cursor.fetchone()
 
             if row is None:
+
+                if member is None:
+                    message = (
+                        "Use `/link` first or specify an osu! username."
+                    )
+                else:
+                    message = (
+                        f"**{member.display_name}** doesn't have a linked osu! account."
+                    )
+
                 embed = EmbedFactory.error(
                     "Account Not Linked",
-                    (
-                        "Use `/link <username>` first "
-                        "or specify a username."
-                    ),
+                    message,
                 )
 
-                await interaction.followup.send(
-                    embed=embed
-                )
+                await interaction.followup.send(embed=embed)
                 return
 
             osu_id = row[0]

@@ -78,10 +78,10 @@ class OsuEmbed:
             county_name = county["county_name"]
             county_rank = county["county_rank"]
 
-            location += f"\n📍 {county_name}"
+            location += f"\n {county_name}"
 
             if county_rank is not None:
-                location += f" — #{county_rank:,} in county"
+                location += f" — #{county_rank:,}"
 
         embed.add_field(
             name="🌍 Location",
