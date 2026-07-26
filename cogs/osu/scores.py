@@ -118,22 +118,6 @@ class Scores(commands.Cog):
             if profile is not None:
                 score["user"] = profile
 
-            if not score.get("beatmap") or not score.get("beatmapset"):
-                score = await OsuAPI.enrich_score(
-                    score,
-                    include_user=False,
-                    include_beatmap=True,
-                    include_beatmapset=True,
-                )
-
-                if profile is not None:
-                    score["user"] = profile
-
-            fc_pp = await OsuAPI.calculate_fc_pp(score)
-
-            if fc_pp is not None:
-                score["fc_pp"] = fc_pp
-
             embed = ScoreEmbed.recent(score)
             await interaction.followup.send(embed=embed)
 
