@@ -12,6 +12,7 @@ from utils.osu_embed import OsuEmbed
 from views.profile import ProfileView
 from utils.osu_oauth import OsuOAuth
 from utils.rank_roles import RankRoleService
+from utils.counties import CountyService
 
 MEMBER_ROLE_ID = int(os.getenv("MEMBER_ROLE_ID", "0"))
 
@@ -272,6 +273,21 @@ class Profile(commands.Cog):
 
         user = await OsuAPI.get_user(osu_id)
 
+        county = None
+
+        with sqlite3.connect(DATABASE_PATH) as connection:
+            row = connection.execute(
+                """
+                SELECT county_name
+                FROM osu_counties
+                WHERE osu_id = ?
+                """,
+                (osu_id,)
+            ).fetchone()
+
+        if row:
+            county = row[0]
+
         if user is None:
             embed = EmbedFactory.error(
                 "Player Not Found",
@@ -286,7 +302,12 @@ class Profile(commands.Cog):
             )
             return
 
-        embed = OsuEmbed.profile(user)
+        county_data = CountyService.get_player_county(osu_id)
+
+        embed = OsuEmbed.profile(
+            user=user,
+            county=county_data
+        )
 
         view = ProfileView(
             author_id=interaction.user.id,

@@ -4,7 +4,10 @@ import discord
 class OsuEmbed:
 
     @staticmethod
-    def profile(user: dict) -> discord.Embed:
+    def profile(
+        user: dict,
+        county= None,
+    ) -> discord.Embed:
 
         stats = user["statistics"]
 
@@ -69,9 +72,14 @@ class OsuEmbed:
             inline=True
         )
 
+        location = f"{user['country']['name']} ({user['country_code']})"
+
+        if county:
+            location += f"\n📍 {county}"
+
         embed.add_field(
-            name="🌍 Country",
-            value=f"{user['country']['name']} ({user['country_code']})",
+            name="🌍 Location",
+            value=location,
             inline=True
         )
 
