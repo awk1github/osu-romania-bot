@@ -4,10 +4,13 @@ import asyncio
 import logging
 import os
 import time
+
 from typing import Any
 from urllib.parse import quote
+from collections import OrderedDict
 
 import aiohttp
+import rosu_pp_py
 
 
 logger = logging.getLogger(__name__)
@@ -16,6 +19,8 @@ ACCESS_TOKEN: str | None = None
 TOKEN_EXPIRES = 0.0
 TOKEN_LOCK = asyncio.Lock()
 
+BEATMAP_CACHE: OrderedDict[int, bytes] = OrderedDict()
+BEATMAP_CACHE_LIMIT = 128
 
 class OsuAPI:
     """Small asynchronous wrapper around the public osu! API v2."""
@@ -312,6 +317,57 @@ class OsuAPI:
         return await OsuAPI.api_get(
             f"scores/{mode}/{score_id}"
         )
+
+    @staticmethod
+    async def get_beatmap_file(beatmap_id: int) -> bytes | None:
+        if beatmap_id in BEATMAP_CACHE:
+            BEATMAP_CACHE.move_to_end(beatmap_id)
+            return BEATMAP_CACHE[beatmap_id]
+
+        url = f"https://osu.ppy.sh/osu/{beatmap_id}"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return None
+
+                data = await response.read()
+
+        BEATMAP_CACHE[beatmap_id] = data
+
+        if len(BEATMAP_CACHE) > BEATMAP_CACHE_LIMIT:
+            BEATMAP_CACHE.popitem(last=False)
+
+        return data
+
+    @staticmethod
+    async def calculate_fc_pp(score: dict) -> float | None:
+        beatmap = score.get("beatmap") or {}
+
+        beatmap_id = beatmap.get("id")
+
+        if beatmap_id is None:
+            return None
+
+        beatmap_bytes = await OsuAPI.get_beatmap_file(int(beatmap_id))
+
+        if beatmap_bytes is None:
+            return None
+
+        def calculate():
+            beatmap = rosu_pp_py.Beatmap(bytes=beatmap_bytes)
+
+            mods = "".join(score.get("mods") or [])
+
+            performance = rosu_pp_py.Performance(
+                mods=mods,
+                accuracy=(score.get("accuracy") or 0) * 100,
+                misses=0,
+            )
+
+            return performance.calculate(beatmap).pp
+
+        return await asyncio.to_thread(calculate)
 
     # BEATMAPS
 

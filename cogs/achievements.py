@@ -307,6 +307,18 @@ class Achievements(commands.Cog):
             ephemeral=True,
         )
 
+    @staticmethod
+    def get_score_id(score: dict[str, Any]) -> int | None:
+        raw_id = (
+            score.get("legacy_score_id")
+            or score.get("id")
+        )
+
+        try:
+            return int(raw_id)
+        except (TypeError, ValueError):
+            return None
+
     def get_guild_achievement_channel(
         self,
         guild_id: int,
@@ -493,7 +505,7 @@ class Achievements(commands.Cog):
         old_score_ids = set(old.top_10_ids)
 
         for position, score in enumerate(top_scores[:5], start=1):
-            score_id = self.to_int(score.get("id"))
+            score_id = self.get_score_id(score)
 
             if score_id is None or score_id in old_score_ids:
                 continue
@@ -963,10 +975,10 @@ class Achievements(commands.Cog):
 
         top_score = top_scores[0] if top_scores else {}
 
-        top_10_ids = [
+        top_score_ids = [
             score_id
-            for score in top_scores[:5]
-            if (score_id := self.to_int(score.get("id"))) is not None
+            for score in top_scores
+            if (score_id := self.get_score_id(score)) is not None
         ]
 
         return Snapshot(
@@ -974,9 +986,9 @@ class Achievements(commands.Cog):
             total_pp=self.to_float(statistics.get("pp")),
             global_rank=self.to_int(statistics.get("global_rank")),
             country_rank=self.to_int(statistics.get("country_rank")),
-            top_score_id=self.to_int(top_score.get("id")),
+            top_score_id=self.get_score_id(top_score),
             top_score_pp=self.to_float(top_score.get("pp")),
-            top_10_ids=top_10_ids,
+            top_10_ids=top_score_ids,
         )
 
     def get_snapshot(self, osu_id: int) -> Snapshot | None:
