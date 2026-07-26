@@ -381,9 +381,16 @@ class Achievements(commands.Cog):
         )
 
     async def check_user(self, linked_user: LinkedUser) -> None:
+        print(f"Checking {linked_user.osu_username}")
         profile, top_scores = await asyncio.gather(
             self.fetch_profile(linked_user.osu_id),
             self.fetch_top_10(linked_user.osu_id),
+        )
+
+        logger.warning(
+            "Fetched %s top scores for %s",
+            len(top_scores),
+            linked_user.osu_username,
         )
 
         if not profile:
@@ -428,6 +435,12 @@ class Achievements(commands.Cog):
             new=current_snapshot,
         )
 
+        logger.warning(
+            "Detected %s achievements for %s",
+            len(achievements),
+            linked_user.osu_username,
+        )
+
         for achievement in achievements:
             was_created = await asyncio.to_thread(
                 self.register_event,
@@ -439,6 +452,12 @@ class Achievements(commands.Cog):
             if not was_created:
                 continue
 
+            logger.warning(
+                "Sending achievement %s (%s)",
+                achievement.event_type,
+                achievement.event_key,
+            )
+            
             await self.send_achievement(
                 discord_id=linked_user.discord_id,
                 embed=achievement.embed,
@@ -454,6 +473,7 @@ class Achievements(commands.Cog):
     # ------------------------------------------------------------------
 
     def detect_achievements(
+
         self,
         linked_user: LinkedUser,
         profile: dict[str, Any],
@@ -506,6 +526,14 @@ class Achievements(commands.Cog):
 
         for position, score in enumerate(top_scores[:5], start=1):
             score_id = self.get_score_id(score)
+
+            logger.warning(
+                "Player=%s Position=%s ScoreID=%s AlreadyKnown=%s",
+                linked_user.osu_username,
+                position,
+                score_id,
+                score_id in old_score_ids if score_id is not None else False,
+            )
 
             if score_id is None or score_id in old_score_ids:
                 continue
