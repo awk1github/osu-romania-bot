@@ -151,13 +151,6 @@ class OsuEmbed:
             inline=True,
         )
 
-        # Forces the next fields onto a new row.
-        embed.add_field(
-            name="\u200b",
-            value="\u200b",
-            inline=False,
-        )
-
         # Last row: Activity, Scores and Joined
         embed.add_field(
             name="🎮 Activity",
