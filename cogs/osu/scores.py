@@ -144,7 +144,8 @@ class Scores(commands.Cog):
         interaction: discord.Interaction,
         username: str = None
     ):
-        await interaction.response.defer()
+        if not interaction.response.is_done():
+            await interaction.response.defer()
 
         if username is None:
 
@@ -234,7 +235,6 @@ class Scores(commands.Cog):
             current_page=1,
             max_pages=max_pages,
             callback=build_page,
-            allow_everyone=True,
         )
 
         message = await interaction.followup.send(
