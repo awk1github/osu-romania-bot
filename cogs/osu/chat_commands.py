@@ -192,6 +192,11 @@ class ChatCommands(commands.Cog):
                     )
                     score["user"] = profile
 
+                fc_pp = await OsuAPI.calculate_fc_pp(score)
+
+                if fc_pp is not None:
+                    score["fc_pp"] = fc_pp
+
                 embed = ScoreEmbed.recent(score)
 
                 await message.reply(

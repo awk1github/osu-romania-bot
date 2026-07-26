@@ -132,6 +132,13 @@ class ScoreEmbed:
             else "Unranked"
         )
 
+        fc_pp_value = score.get("fc_pp")
+        fc_pp_text = (
+            f" (**{ScoreEmbed._float(fc_pp_value):.2f}pp if FC**)"
+            if fc_pp_value is not None
+            else ""
+        )
+
         accuracy = ScoreEmbed._float(score.get("accuracy")) * 100
         time_value = played_at(score)
         time_ago = (
@@ -169,7 +176,7 @@ class ScoreEmbed:
 
         embed.description = (
             f"**{map_title}**\n"
-            f"{rank_emoji} **{mods}** • **{pp_text}** • "
+            f"{rank_emoji} **{mods}** • **{pp_text}**{fc_pp_text} • "
             f"**{accuracy:.2f}%** • {time_ago}\n"
             f"**{ScoreEmbed._number(displayed_score):,}** • "
             f"{combo_text} • **{misses}❌**\n"
