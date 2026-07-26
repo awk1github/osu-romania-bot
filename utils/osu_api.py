@@ -367,7 +367,11 @@ class OsuAPI:
 
             return performance.calculate(beatmap).pp
 
-        return await asyncio.to_thread(calculate)
+        try:
+            return await asyncio.to_thread(calculate)
+        except Exception as e:
+            print(f"FC PP calculation failed: {e!r}")
+            return None
 
     # BEATMAPS
 
