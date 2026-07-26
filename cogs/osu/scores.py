@@ -118,6 +118,10 @@ class Scores(commands.Cog):
             if profile is not None:
                 score["user"] = profile
 
+            fc_pp = await OsuAPI.calculate_fc_pp(score)
+
+            print(f"FC PP: {fc_pp}")
+
             embed = ScoreEmbed.recent(score)
             await interaction.followup.send(embed=embed)
 
