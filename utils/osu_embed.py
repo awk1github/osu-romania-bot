@@ -78,37 +78,21 @@ class OsuEmbed:
             except (KeyError, TypeError, IndexError):
                 pass
 
-        joined_datetime = None
-
         join_date = user.get("join_date")
+        joined_text = "Unknown"
 
         if join_date:
             try:
                 joined_datetime = datetime.fromisoformat(
                     join_date.replace("Z", "+00:00")
                 ).astimezone(UTC)
-            except ValueError:
-                pass
 
-        is_online = user.get("is_online", False)
-        last_visit = user.get("last_visit")
-
-        if is_online:
-            activity_text = "🟢 Online"
-        elif last_visit:
-            last_visit_datetime = discord.utils.parse_time(
-                last_visit
-            )
-
-            if last_visit_datetime:
-                activity_text = (
-                    "Last seen\n"
-                    f"{discord.utils.format_dt(last_visit_datetime, style='R')}"
+                joined_text = joined_datetime.strftime(
+                    "%d %B %Y"
                 )
-            else:
-                activity_text = "🔴 Offline"
-        else:
-            activity_text = "🔴 Offline"
+
+            except (ValueError, TypeError):
+                joined_text = str(join_date)[:10]
 
         embed = discord.Embed(
             title=user["username"],
@@ -166,18 +150,10 @@ class OsuEmbed:
                 url=avatar_url
             )
 
-        if joined_datetime:
-            footer_text = (
+        embed.set_footer(
+            text=(
                 f"osu!Romania • "
-                f"Joined {discord.utils.format_dt(joined_datetime, style='D')} • "
+                f"Joined: {joined_text} • "
                 f"osu! ID: {user['id']}"
             )
-        else:
-            footer_text = (
-                f"osu!Romania • "
-                f"osu! ID: {user['id']}"
-            )
-
-        embed.set_footer(text=footer_text)
-
-        return embed
+        )
