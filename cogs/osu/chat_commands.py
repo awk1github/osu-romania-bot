@@ -11,52 +11,48 @@ class ChatCommands(commands.Cog):
         self,
         message: discord.Message,
     ) -> None:
-        # Ignore bots
         if message.author.bot:
             return
 
         content = message.content.strip()
 
-        if content.startswith("<rs"):
-            parts = content.split(maxsplit=1)
+        # Separate the command from the optional username.
+        command, _, argument = content.partition(" ")
+        username = argument.strip() or None
 
-            username = parts[1] if len(parts) > 1 else None
-
+        if command.lower() == "<rs":
             await self.handle_recent(
-                message,
-                username,
+                message=message,
+                username=username,
             )
+            return
 
-        elif content.startswith("<c"):
-            parts = content.split(maxsplit=1)
-
-            username = parts[1] if len(parts) > 1 else None
-
+        if command.lower() == "<c":
             await self.handle_compare(
-                message,
-                username,
-            )
-            
-        async def handle_recent(
-            self,
-            message: discord.Message,
-            username: str | None,
-        ) -> None:
-            await message.reply(
-                f"Recent for: {username or 'linked account'}",
-                mention_author=False,
+                message=message,
+                username=username,
             )
 
+    async def handle_recent(
+        self,
+        message: discord.Message,
+        username: str | None,
+    ) -> None:
+        await message.reply(
+            f"Recent for: **{username or 'linked account'}**",
+            mention_author=False,
+        )
 
-        async def handle_compare(
-            self,
-            message: discord.Message,
-            username: str | None,
-        ) -> None:
-            await message.reply(
-                f"Compare for: {username or 'linked account'}",
-                mention_author=False,
-            )
+    async def handle_compare(
+        self,
+        message: discord.Message,
+        username: str | None,
+    ) -> None:
+        await message.reply(
+            f"Compare for: **{username or 'linked account'}**",
+            mention_author=False,
+        )
 
-async def setup(bot: commands.Bot):
+
+async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(ChatCommands(bot))
