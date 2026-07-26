@@ -125,9 +125,8 @@ class ServerLeaderboardView(PaginationView):
             global_rank = player["global_rank"]
             country_rank = player["country_rank"]
             accuracy = player["accuracy"]
-            country_flag = country_code_to_flag(country_code)
             country_code = player["country_code"]
-
+            country_flag = country_code_to_flag(country_code)
             profile_link = (
                 f"https://osu.ppy.sh/users/{osu_id}"
             )
