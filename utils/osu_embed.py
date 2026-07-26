@@ -78,23 +78,17 @@ class OsuEmbed:
             except (KeyError, TypeError, IndexError):
                 pass
 
-        join_date = user.get("join_date")
+        joined_datetime = None
 
-        joined_text = "Unknown"
+        join_date = user.get("join_date")
 
         if join_date:
             try:
                 joined_datetime = datetime.fromisoformat(
                     join_date.replace("Z", "+00:00")
                 ).astimezone(UTC)
-
-                joined_text = discord.utils.format_dt(
-                    joined_datetime,
-                    style="D",
-                )
-
             except ValueError:
-                joined_text = join_date[:10]
+                pass
 
         is_online = user.get("is_online", False)
         last_visit = user.get("last_visit")
@@ -172,12 +166,18 @@ class OsuEmbed:
                 url=avatar_url
             )
 
-        embed.set_footer(
-            text=(
+        if joined_datetime:
+            footer_text = (
                 f"osu!Romania • "
-                f"Joined: {joined_text} • "
+                f"Joined {discord.utils.format_dt(joined_datetime, style='D')} • "
                 f"osu! ID: {user['id']}"
             )
-        )
+        else:
+            footer_text = (
+                f"osu!Romania • "
+                f"osu! ID: {user['id']}"
+            )
+
+        embed.set_footer(text=footer_text)
 
         return embed
