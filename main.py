@@ -20,7 +20,7 @@ intents.message_content = True
 class OsuRomania(commands.Bot):
     def __init__(self):
         super().__init__(
-            command_prefix="!",
+            command_prefix="<",
             intents=intents
         )
 
@@ -37,6 +37,7 @@ class OsuRomania(commands.Bot):
             "cogs.osu.scores",
             "cogs.osu.leaderboard",
             "cogs.osu.listeners",
+            "cogs.osu.chat_commands",
         ]
 
         for extension in extensions:
