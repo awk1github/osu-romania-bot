@@ -148,7 +148,7 @@ class OsuEmbed:
                 f"Plays: **{play_count:,}**\n"
                 f"Play Time: **{play_time // 3600:,}h**"
             ),
-            inline=True,
+            inline=False,
         )
 
         # Last row: Activity, Scores and Joined
