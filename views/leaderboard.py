@@ -11,6 +11,17 @@ DATABASE_PATH = Path("database/bot.db")
 
 PLAYERS_PER_PAGE = 10
 
+def country_code_to_flag(
+    country_code: str | None,
+) -> str:
+    if not country_code or len(country_code) != 2:
+        return "🌐"
+
+    return "".join(
+        chr(ord(character) + 127397)
+        for character in country_code.upper()
+    )
+
 
 class ServerLeaderboardView(PaginationView):
     def __init__(
@@ -98,6 +109,8 @@ class ServerLeaderboardView(PaginationView):
 
         lines: list[str] = []
 
+        country_code = player["country_code"]
+
         for index, player in enumerate(players):
             server_rank = (
                 (page - 1) * PLAYERS_PER_PAGE
@@ -112,6 +125,7 @@ class ServerLeaderboardView(PaginationView):
             global_rank = player["global_rank"]
             country_rank = player["country_rank"]
             accuracy = player["accuracy"]
+            country_flag = country_code_to_flag(country_code)
 
             profile_link = (
                 f"https://osu.ppy.sh/users/{osu_id}"
@@ -165,7 +179,7 @@ class ServerLeaderboardView(PaginationView):
                     f"{you}\n"
                     f"💎 **{pp_text}** • "
                     f"🌍 **{global_text}** • "
-                    f"🇷🇴 **{country_text}** • "
+                    f"{country_flag} **{country_text}** • "
                     f"🎯 **{accuracy_text}**"
                 )
             )

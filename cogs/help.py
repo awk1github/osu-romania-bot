@@ -38,7 +38,7 @@ class Help(commands.Cog):
             value=(
                 "`/profile` — View your linked profile\n"
                 "`/profile username:<player>` — View any osu! player\n"
-                "`/profile member:<member>` — View a linked Discord member"
+                "`/profile member:<member>` — View a linked Discord member\n"
                 "`/recent` — View your most recent play\n"
                 "`/recent username:<player>` — View another player's recent play\n"
                 "`/top` — View your best osu! plays\n"
