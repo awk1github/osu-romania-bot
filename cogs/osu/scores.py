@@ -28,7 +28,8 @@ class Scores(commands.Cog):
         interaction: discord.Interaction,
         username: str | None = None,
     ):
-        await interaction.response.defer()
+        if not interaction.response.is_done():
+            await interaction.response.defer()
 
         try:
             if username is None:
