@@ -39,6 +39,20 @@ class Help(commands.Cog):
                 "`/profile` — View your linked profile\n"
                 "`/profile username:<player>` — View any osu! player\n"
                 "`/profile member:<member>` — View a linked Discord member"
+                "`/recent` — View your most recent play\n"
+                "`/recent username:<player>` — View another player's recent play\n"
+                "`/top` — View your best osu! plays\n"
+                "`/top username:<player>` — View another player's top plays"
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="🏆 Leaderboards",
+            value=(
+                "`/leaderboard` — View the server osu! leaderboard\n"
+                "`/county leaderboard:<county>` — View each county osu! leaderboard\n"
+                "Use the command options to filter the rankings when available."
             ),
             inline=False
         )
