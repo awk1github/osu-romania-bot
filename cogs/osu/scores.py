@@ -120,8 +120,9 @@ class Scores(commands.Cog):
                 score["user"] = profile
 
             fc_pp = await OsuAPI.calculate_fc_pp(score)
-
-            print(f"FC PP: {fc_pp}")
+            print("FC PP:", fc_pp)
+            print("Mods:", score.get("mods"))
+            print("Accuracy:", score.get("accuracy"))
 
             embed = ScoreEmbed.recent(score)
             await interaction.followup.send(embed=embed)
