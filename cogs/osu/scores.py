@@ -7,6 +7,8 @@ from discord import app_commands
 from utils.osu_api import OsuAPI
 from utils.embeds import EmbedFactory
 from utils.score_embed import ScoreEmbed
+from utils.emojis import RANK_EMOJIS
+from views.pagination import PaginationView
 
 GUILD_ID = 1473125019692564542
 
@@ -183,12 +185,15 @@ class Scores(commands.Cog):
 
             osu_id = user["id"]
 
-        scores = await OsuAPI.get_top(osu_id)
+        scores = await OsuAPI.get_top(
+            osu_id,
+            limit=100,
+        )
 
         if not scores:
             embed = EmbedFactory.info(
                 "No Scores",
-                "No top scores were found."
+                "No top scores were found.",
             )
 
             await interaction.followup.send(embed=embed)
@@ -196,9 +201,49 @@ class Scores(commands.Cog):
 
         user = await OsuAPI.get_user(osu_id)
 
-        embed = ScoreEmbed.top(user, scores)
+        if user is None:
+            embed = EmbedFactory.error(
+                "Player Error",
+                "The player's profile could not be loaded.",
+            )
 
-        await interaction.followup.send(embed=embed)
+            await interaction.followup.send(embed=embed)
+            return
+
+        per_page = 5
+
+        max_pages = max(
+            1,
+            (len(scores) + per_page - 1) // per_page,
+        )
+
+
+        async def build_page(page: int) -> discord.Embed:
+            return ScoreEmbed.top(
+                user=user,
+                scores=scores,
+                page=page,
+                per_page=per_page,
+            )
+
+
+        embed = await build_page(1)
+
+        view = PaginationView(
+            author_id=interaction.user.id,
+            current_page=1,
+            max_pages=max_pages,
+            callback=build_page,
+            allow_everyone=True,
+        )
+
+        message = await interaction.followup.send(
+            embed=embed,
+            view=view,
+            wait=True,
+        )
+
+        view.message = message
 
 
 async def setup(bot):

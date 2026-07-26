@@ -209,6 +209,8 @@ class ScoreEmbed:
     def top(
         user: dict,
         scores: list,
+        page: int = 1,
+        per_page: int = 5,
     ) -> discord.Embed:
 
         stats = user.get("statistics") or {}
@@ -220,13 +222,28 @@ class ScoreEmbed:
         country_rank = format_rank(stats.get("country_rank"))
         pp = stats.get("pp") or 0
 
+        country_code = (
+            user.get("country_code")
+            or (user.get("country") or {}).get("code")
+            or "?"
+        )
+
+        start = (page - 1) * per_page
+        end = start + per_page
+        page_scores = scores[start:end]
+
+        max_pages = max(
+            1,
+            (len(scores) + per_page - 1) // per_page,
+        )
+
         embed = discord.Embed(
             title=f"{user['username']}'s Top Plays",
             url=f"https://osu.ppy.sh/users/{user['id']}",
             description=(
                 f"💎 **{pp:,.0f}pp** • "
                 f"🌍 **{global_rank}** • "
-                f"🇷🇴 **{country_rank}**"
+                f"{country_code} **{country_rank}**"
             ),
             color=discord.Color.from_rgb(255, 204, 77),
         )
@@ -236,67 +253,115 @@ class ScoreEmbed:
         if avatar_url:
             embed.set_thumbnail(url=avatar_url)
 
-        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
-
         lines = []
 
-        for index, score in enumerate(scores[:5]):
+        for index, score in enumerate(page_scores):
+            position = start + index + 1
+
             beatmap = score.get("beatmap") or {}
             beatmapset = score.get("beatmapset") or {}
-            score_stats = score.get("statistics") or {}
 
-            artist = beatmapset.get("artist", "Unknown Artist")
-            title = beatmapset.get("title", "Unknown Title")
-            version = beatmap.get("version", "Unknown Difficulty")
-            beatmap_url = beatmap.get("url", "")
+            artist = beatmapset.get("artist") or "Unknown Artist"
+            title = beatmapset.get("title") or "Unknown Title"
+            version = beatmap.get("version") or "Unknown Difficulty"
+
+            beatmap_id = (
+                beatmap.get("id")
+                or score.get("beatmap_id")
+            )
+
+            beatmap_url = beatmap.get("url")
+
+            if not beatmap_url and beatmap_id is not None:
+                beatmap_url = (
+                    f"https://osu.ppy.sh/beatmaps/{beatmap_id}"
+                )
+
+            map_name = f"{artist} — {title} [{version}]"
+
+            if beatmap_url:
+                map_name = f"[{map_name}]({beatmap_url})"
 
             score_pp = score.get("pp")
+
             pp_text = (
-                f"{score_pp:.2f}pp"
+                f"{ScoreEmbed._float(score_pp):.2f}pp"
                 if score_pp is not None
                 else "Unranked"
             )
 
-            accuracy = (score.get("accuracy") or 0) * 100
-            rank = score.get("rank", "?")
-            combo = score.get("max_combo") or 0
-            misses = score_stats.get("count_miss") or 0
-
-            raw_mods = score.get("mods") or []
-
-            mods = "".join(
-                mod.get("acronym", "")
-                if isinstance(mod, dict)
-                else str(mod)
-                for mod in raw_mods
+            accuracy = (
+                ScoreEmbed._float(score.get("accuracy")) * 100
             )
 
-            mods = mods or "NM"
-            mods_text = f" +{mods}" if mods != "NM" else ""
+            rank = str(
+                score.get("rank") or "F"
+            ).upper()
 
-            map_name = (
-                f"[{artist} — {title} [{version}]]"
-                f"({beatmap_url})"
-                if beatmap_url
-                else f"{artist} — {title} [{version}]"
+            rank_emoji = RANK_EMOJIS.get(
+                rank,
+                f"`{rank}`",
             )
+
+            mods = format_mods(score)
+
+            stars = ScoreEmbed._float(
+                beatmap.get("difficulty_rating")
+            )
+
+            combo = ScoreEmbed._number(
+                score.get("max_combo")
+                or score.get("maximum_combo")
+            )
+
+            map_max_combo = beatmap.get("max_combo")
+
+            if map_max_combo is not None:
+                combo_text = (
+                    f"{combo:,}x/"
+                    f"{ScoreEmbed._number(map_max_combo):,}x"
+                )
+            else:
+                combo_text = f"{combo:,}x"
+
+            misses = miss_count(score)
+
+            time_value = played_at(score)
+
+            time_text = (
+                discord.utils.format_dt(
+                    time_value,
+                    style="R",
+                )
+                if time_value is not None
+                else "Unknown time"
+            )
+
+            if position == 1:
+                placement = "🥇"
+            elif position == 2:
+                placement = "🥈"
+            elif position == 3:
+                placement = "🥉"
+            else:
+                placement = f"**#{position}**"
 
             lines.append(
-                f"{medals[index]} **{pp_text} • {rank}{mods_text}**\n"
+                f"{placement} {rank_emoji} **{pp_text}** • "
+                f"**{accuracy:.2f}%**\n"
                 f"{map_name}\n"
-                f"🎯 {accuracy:.2f}% • "
-                f"🔥 {combo:,}x • "
-                f"❌ {misses}"
+                f"⭐ **{stars:.2f}★** • **{mods}** • "
+                f"**{combo_text}** • **{misses}❌** • "
+                f"{time_text}"
             )
 
-        embed.add_field(
-            name="\u200b",
-            value="\n\n".join(lines),
-            inline=False,
-        )
+        embed.description += "\n\n" + "\n\n".join(lines)
 
         embed.set_footer(
-            text="osu!Romania • Top Plays"
+            text=(
+                f"osu!Romania • Top Plays • "
+                f"Page {page}/{max_pages}"
+            )
         )
 
         return embed
