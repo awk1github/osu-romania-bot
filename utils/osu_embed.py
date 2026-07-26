@@ -1,4 +1,5 @@
 import discord
+from datetime import datetime, UTC
 
 
 class OsuEmbed:
@@ -78,18 +79,22 @@ class OsuEmbed:
                 pass
 
         join_date = user.get("join_date")
+
         joined_text = "Unknown"
 
         if join_date:
-            joined_datetime = discord.utils.parse_time(
-                join_date
-            )
+            try:
+                joined_datetime = datetime.fromisoformat(
+                    join_date.replace("Z", "+00:00")
+                ).astimezone(UTC)
 
-            if joined_datetime:
                 joined_text = discord.utils.format_dt(
                     joined_datetime,
                     style="D",
                 )
+
+            except ValueError:
+                joined_text = join_date[:10]
 
         is_online = user.get("is_online", False)
         last_visit = user.get("last_visit")
