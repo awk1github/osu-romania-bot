@@ -100,15 +100,24 @@ class ServerRecord:
         if not linked_users:
             return []
 
+        semaphore = asyncio.Semaphore(5)
+
+        async def fetch_with_limit(linked_user: dict):
+            async with semaphore:
+                return await ServerRecord._fetch_user_score(
+                    beatmap_id=int(beatmap_id),
+                    linked_user=linked_user,
+                )
+            
         tasks = [
-            ServerRecord._fetch_user_score(
-                beatmap_id=int(beatmap_id),
-                linked_user=user
-            )
+            fetch_with_limit(user)
             for user in linked_users
         ]
 
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(
+            *tasks,
+            return_exceptions=True,
+        )
 
         valid_scores = [
             score
