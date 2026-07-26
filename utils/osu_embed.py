@@ -160,12 +160,6 @@ class OsuEmbed:
             inline=True,
         )
 
-        embed.add_field(
-            name="📅 Joined",
-            value=joined_text,
-            inline=True,
-        )
-
         avatar_url = user.get("avatar_url")
 
         if avatar_url:
@@ -176,6 +170,7 @@ class OsuEmbed:
         embed.set_footer(
             text=(
                 f"osu!Romania • "
+                f"Joined: {joined_text} • "
                 f"osu! ID: {user['id']}"
             )
         )
