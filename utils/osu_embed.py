@@ -148,13 +148,6 @@ class OsuEmbed:
                 f"Plays: **{play_count:,}**\n"
                 f"Play Time: **{play_time // 3600:,}h**"
             ),
-            inline=False,
-        )
-
-        # Last row: Activity, Scores and Joined
-        embed.add_field(
-            name="🎮 Activity",
-            value=activity_text,
             inline=True,
         )
 
