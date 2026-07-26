@@ -157,3 +157,5 @@ class OsuEmbed:
                 f"osu! ID: {user['id']}"
             )
         )
+
+        return embed
