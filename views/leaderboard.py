@@ -109,7 +109,7 @@ class ServerLeaderboardView(PaginationView):
 
         lines: list[str] = []
 
-        country_code = player["country_code"]
+    
 
         for index, player in enumerate(players):
             server_rank = (
@@ -126,6 +126,7 @@ class ServerLeaderboardView(PaginationView):
             country_rank = player["country_rank"]
             accuracy = player["accuracy"]
             country_flag = country_code_to_flag(country_code)
+            country_code = player["country_code"]
 
             profile_link = (
                 f"https://osu.ppy.sh/users/{osu_id}"
