@@ -325,6 +325,139 @@ class Profile(commands.Cog):
             view=view,
         )
 
+    @app_commands.command(
+        name="refresh-rank",
+        description="Refresh your osu! rank role.",
+    )
+
+    @app_commands.checks.cooldown(
+        1,
+        60,
+        key=lambda interaction: interaction.user.id,
+    )
+
+    async def refresh_rank(
+        self,
+        interaction: discord.Interaction,
+    ) -> None:
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                embed=EmbedFactory.error(
+                    "Server Only",
+                    "Use this command inside the Discord server.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        with sqlite3.connect(DATABASE_PATH) as connection:
+            account = connection.execute(
+                """
+                SELECT osu_id
+                FROM osu_accounts
+                WHERE discord_id = ?
+                """,
+                (interaction.user.id,),
+            ).fetchone()
+
+        if account is None:
+            await interaction.followup.send(
+                embed=EmbedFactory.error(
+                    "Account Not Linked",
+                    "Use `/link` before refreshing your rank role.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        if not isinstance(interaction.user, discord.Member):
+            await interaction.followup.send(
+                embed=EmbedFactory.error(
+                    "Member Not Found",
+                    "Your Discord server member could not be loaded.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        osu_id = account[0]
+        osu_user = await OsuAPI.get_user(osu_id)
+
+        if osu_user is None:
+            await interaction.followup.send(
+                embed=EmbedFactory.error(
+                    "osu! API Error",
+                    "Your osu! profile could not be loaded. Try again later.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        statistics = osu_user.get("statistics") or {}
+        global_rank = statistics.get("global_rank")
+
+        if global_rank is None:
+            await interaction.followup.send(
+                embed=EmbedFactory.error(
+                    "No Global Rank",
+                    "Your osu! profile does not currently have a global rank.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        try:
+            changed = await RankRoleService.update_member(
+                interaction.user,
+                global_rank,
+            )
+
+        except discord.Forbidden:
+            await interaction.followup.send(
+                embed=EmbedFactory.error(
+                    "Missing Permissions",
+                    "I do not have permission to update your rank role.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        except discord.HTTPException as error:
+            print(
+                "[REFRESH RANK] Discord role update failed: "
+                f"{type(error).__name__}: {error}"
+            )
+
+            await interaction.followup.send(
+                embed=EmbedFactory.error(
+                    "Role Update Failed",
+                    "Discord rejected the role update. Try again later.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        if changed:
+            description = (
+                f"Your rank role has been updated.\n\n"
+                f"Current global rank: **#{global_rank:,}**"
+            )
+        else:
+            description = (
+                f"Your rank role is already correct.\n\n"
+                f"Current global rank: **#{global_rank:,}**"
+            )
+
+        await interaction.followup.send(
+            embed=EmbedFactory.success(
+                "Rank Role Refreshed",
+                description,
+            ),
+            ephemeral=True,
+        )
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Profile(bot))

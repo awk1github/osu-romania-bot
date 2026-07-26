@@ -42,7 +42,8 @@ class Help(commands.Cog):
                 "`/recent` — View your most recent play\n"
                 "`/recent username:<player>` — View another player's recent play\n"
                 "`/top` — View your best osu! plays\n"
-                "`/top username:<player>` — View another player's top plays"
+                "`/top username:<player>` — View another player's top plays\n"
+                "`/refresh-rank` — Refresh your Rank Role" 
             ),
             inline=False
         )
