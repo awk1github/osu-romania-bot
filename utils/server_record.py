@@ -100,7 +100,7 @@ class ServerRecord:
         if not linked_users:
             return []
 
-        semaphore = asyncio.Semaphore(5)
+        semaphore = asyncio.Semaphore(3)
 
         async def fetch_with_limit(linked_user: dict):
             async with semaphore:
