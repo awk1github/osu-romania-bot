@@ -387,12 +387,6 @@ class Achievements(commands.Cog):
             self.fetch_top_10(linked_user.osu_id),
         )
 
-        logger.warning(
-            "Fetched %s top scores for %s",
-            len(top_scores),
-            linked_user.osu_username,
-        )
-
         if not profile:
             logger.warning(
                 "No profile returned for osu! user %s.",
@@ -435,12 +429,6 @@ class Achievements(commands.Cog):
             new=current_snapshot,
         )
 
-        logger.warning(
-            "Detected %s achievements for %s",
-            len(achievements),
-            linked_user.osu_username,
-        )
-
         for achievement in achievements:
             was_created = await asyncio.to_thread(
                 self.register_event,
@@ -451,12 +439,6 @@ class Achievements(commands.Cog):
 
             if not was_created:
                 continue
-
-            logger.warning(
-                "Sending achievement %s (%s)",
-                achievement.event_type,
-                achievement.event_key,
-            )
             
             await self.send_achievement(
                 discord_id=linked_user.discord_id,
