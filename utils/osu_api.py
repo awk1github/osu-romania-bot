@@ -30,6 +30,36 @@ class OsuAPI:
     API_VERSION = "20220705"
     REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=20)
 
+    SESSION: aiohttp.ClientSession | None = None
+    SESSION_LOCK = asyncio.Lock()
+
+    @classmethod
+    async def get_session(cls) -> aiohttp.ClientSession:
+        if cls.SESSION is not None and not cls.SESSION.closed:
+            return cls.SESSION
+
+        async with cls.SESSION_LOCK:
+            if cls.SESSION is None or cls.SESSION.closed:
+                connector = aiohttp.TCPConnector(
+                    limit=10,
+                    limit_per_host=5,
+                    ttl_dns_cache=300,
+                )
+
+                cls.SESSION = aiohttp.ClientSession(
+                    timeout=cls.REQUEST_TIMEOUT,
+                    connector=connector,
+                )
+
+        return cls.SESSION
+
+    @classmethod
+    async def close_session(cls) -> None:
+        if cls.SESSION is not None and not cls.SESSION.closed:
+            await cls.SESSION.close()
+
+        cls.SESSION = None
+
     @staticmethod
     async def get_access_token(force_refresh: bool = False) -> str | None:
         global ACCESS_TOKEN, TOKEN_EXPIRES
@@ -66,23 +96,22 @@ class OsuAPI:
             }
 
             try:
-                async with aiohttp.ClientSession(
-                    timeout=OsuAPI.REQUEST_TIMEOUT
-                ) as session:
-                    async with session.post(
-                        OsuAPI.TOKEN_URL,
-                        json=payload,
-                    ) as response:
-                        if response.status != 200:
-                            body = await response.text()
-                            logger.error(
-                                "osu! OAuth failed with HTTP %s: %s",
-                                response.status,
-                                body[:500],
-                            )
-                            return None
+                session = await OsuAPI.get_session()
 
-                        data = await response.json()
+                async with session.post(
+                    OsuAPI.TOKEN_URL,
+                    json=payload,
+                ) as response:
+                    if response.status != 200:
+                        body = await response.text()
+                        logger.error(
+                            "osu! OAuth failed with HTTP %s: %s",
+                            response.status,
+                            body[:500],
+                        )
+                        return None
+
+                    data = await response.json()
 
             except (aiohttp.ClientError, asyncio.TimeoutError):
                 logger.exception("Failed to request an osu! OAuth token.")
@@ -126,14 +155,13 @@ class OsuAPI:
             }
 
             try:
-                async with aiohttp.ClientSession(
-                    timeout=OsuAPI.REQUEST_TIMEOUT
-                ) as session:
-                    async with session.get(
-                        url,
-                        headers=headers,
-                        params=params,
-                    ) as response:
+                session = await OsuAPI.get_session()
+
+                async with session.get(
+                    url,
+                    headers=headers,
+                    params=params,
+                ) as response:
                         if response.status == 401 and attempt == 0:
                             continue
 
@@ -326,12 +354,13 @@ class OsuAPI:
 
         url = f"https://osu.ppy.sh/osu/{beatmap_id}"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    return None
+        session = await OsuAPI.get_session()
 
-                data = await response.read()
+        async with session.get(url) as response:
+            if response.status != 200:
+                return None
+
+            data = await response.read()
 
         BEATMAP_CACHE[beatmap_id] = data
 

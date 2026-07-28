@@ -6,6 +6,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from utils.oauth_server import OAuthServer
+from utils.osu_api import OsuAPI
 
 load_dotenv()
 
@@ -58,6 +59,10 @@ class OsuRomania(commands.Bot):
         print(f"Guilds: {len(self.guilds)}")
         print(f"Cogs Loaded: {len(self.cogs)}")
         print("-" * 40)
+
+        async def close(self) -> None:
+            await OsuAPI.close_session()
+            await super().close()
 
 
 bot = OsuRomania()
