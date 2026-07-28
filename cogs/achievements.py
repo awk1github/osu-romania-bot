@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import sqlite3
+import os
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,14 @@ from discord import app_commands
 
 
 DATABASE_PATH = Path(__file__).resolve().parent.parent / "database" / "bot.db"
+
+
+
+print("DATABASE_PATH =", DATABASE_PATH)
+print("Exists:", DATABASE_PATH.exists())
+print("Parent exists:", DATABASE_PATH.parent.exists())
+print("Readable:", os.access(DATABASE_PATH, os.R_OK))
+print("Writable:", os.access(DATABASE_PATH, os.W_OK))
 
 CHECK_INTERVAL_MINUTES = 15
 REQUEST_DELAY_SECONDS = 1
@@ -989,6 +998,8 @@ class Achievements(commands.Cog):
             top_score_pp=self.to_float(top_score.get("pp")),
             top_10_ids=top_score_ids,
         )
+
+    print("Opening:", DATABASE_PATH)
 
     def get_snapshot(self, osu_id: int) -> Snapshot | None:
         with sqlite3.connect(DATABASE_PATH) as connection:
