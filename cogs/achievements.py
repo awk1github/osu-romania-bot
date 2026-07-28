@@ -332,7 +332,7 @@ class Achievements(commands.Cog):
         self,
         guild_id: int,
     ) -> int | None:
-        with sqlite3.connect(DATABASE_PATH) as connection:
+        with sqlite3.connect(DATABASE_PATH, timeout=30) as connection:
             row = connection.execute(
                 """
                 SELECT achievement_channel_id
@@ -370,7 +370,15 @@ class Achievements(commands.Cog):
                 await self.check_user(linked_user)
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as e:
+                import traceback
+
+                print("=" * 80)
+                print("DATABASE_PATH:", DATABASE_PATH)
+                print("Exception:", repr(e))
+                traceback.print_exc()
+                print("=" * 80)
+
                 logger.exception(
                     "Failed to check achievements for osu! user %s.",
                     linked_user.osu_id,
@@ -1002,7 +1010,7 @@ class Achievements(commands.Cog):
     print("Opening:", DATABASE_PATH)
 
     def get_snapshot(self, osu_id: int) -> Snapshot | None:
-        with sqlite3.connect(DATABASE_PATH) as connection:
+        with sqlite3.connect(DATABASE_PATH, timeout=30) as connection:
             connection.row_factory = sqlite3.Row
 
             row = connection.execute(
@@ -1044,7 +1052,7 @@ class Achievements(commands.Cog):
         )
 
     def save_snapshot(self, snapshot: Snapshot) -> None:
-        with sqlite3.connect(DATABASE_PATH) as connection:
+        with sqlite3.connect(DATABASE_PATH, timeout=30) as connection:
             connection.execute(
                 """
                 INSERT INTO achievement_snapshots (
@@ -1087,7 +1095,7 @@ class Achievements(commands.Cog):
     # ------------------------------------------------------------------
 
     def get_linked_users(self) -> list[LinkedUser]:
-        with sqlite3.connect(DATABASE_PATH) as connection:
+        with sqlite3.connect(DATABASE_PATH, timeout=30) as connection:
             connection.row_factory = sqlite3.Row
 
             rows = connection.execute(
@@ -1111,7 +1119,7 @@ class Achievements(commands.Cog):
         ]
 
     def get_achievement_channels(self) -> list[tuple[int, int]]:
-        with sqlite3.connect(DATABASE_PATH) as connection:
+        with sqlite3.connect(DATABASE_PATH, timeout=30) as connection:
             rows = connection.execute(
                 """
                 SELECT
@@ -1135,7 +1143,7 @@ class Achievements(commands.Cog):
         event_key: str,
     ) -> bool:
         try:
-            with sqlite3.connect(DATABASE_PATH) as connection:
+            with sqlite3.connect(DATABASE_PATH, timeout=30) as connection:
                 connection.execute(
                     """
                     INSERT INTO achievement_events (

@@ -15,4 +15,4 @@ COPY . .
 EXPOSE 8085
 
 # Start the bot
-CMD ["sh", "-c", "python init_db.py && python main.py"]
+CMD ["sh", "-c", "mkdir -p /app/database && chmod 775 /app/database && python init_db.py && python main.py"]
