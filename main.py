@@ -60,7 +60,7 @@ class OsuRomania(commands.Bot):
         print(f"Cogs Loaded: {len(self.cogs)}")
         print("-" * 40)
 
-        async def close(self) -> None:
+    async def close(self) -> None:
             await OsuAPI.close_session()
             await super().close()
 

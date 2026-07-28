@@ -382,10 +382,7 @@ class Achievements(commands.Cog):
 
     async def check_user(self, linked_user: LinkedUser) -> None:
         print(f"Checking {linked_user.osu_username}")
-        profile, top_scores = await asyncio.gather(
-            self.fetch_profile(linked_user.osu_id),
-            self.fetch_top_10(linked_user.osu_id),
-        )
+        profile = await self.fetch_profile(linked_user.osu_id)
 
         if not profile:
             logger.warning(
@@ -394,8 +391,7 @@ class Achievements(commands.Cog):
             )
             return
 
-        if top_scores is None:
-            top_scores = []
+        top_scores = await self.fetch_top_10(linked_user.osu_id)
 
         current_snapshot = self.build_snapshot(
             osu_id=linked_user.osu_id,
@@ -509,13 +505,6 @@ class Achievements(commands.Cog):
         for position, score in enumerate(top_scores[:5], start=1):
             score_id = self.get_score_id(score)
 
-            logger.warning(
-                "Player=%s Position=%s ScoreID=%s AlreadyKnown=%s",
-                linked_user.osu_username,
-                position,
-                score_id,
-                score_id in old_score_ids if score_id is not None else False,
-            )
 
             if score_id is None or score_id in old_score_ids:
                 continue
