@@ -402,7 +402,7 @@ class OsuAPI:
                 misses=0,
                 hitresult_priority=rosu_pp_py.HitResultPriority.BestCase,
             )
-
+            
             return performance.calculate(beatmap).pp
 
         try:
