@@ -2,13 +2,18 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+import os
+from dotenv import load_dotenv
+
 import sqlite3
 from datetime import datetime, timedelta
 
 from utils.embeds import EmbedFactory
 
 
-GUILD_ID = 1473125019692564542
+load_dotenv()
+
+GUILD_ID = int(os.getenv("GUILD_ID"))
 
 
 class Moderation(commands.Cog):

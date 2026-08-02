@@ -33,6 +33,7 @@ class Osu(commands.Cog):
 
         embed = OsuEmbed.profile(user)
 
+        await OsuAPI.close_session()
         await interaction.followup.send(embed=embed)
 
 

@@ -75,6 +75,7 @@ class ChatCommands(commands.Cog):
                     ),
                 )
 
+            await OsuAPI.close_session()
             return int(profile["id"]), profile, None
 
         with sqlite3.connect(DATABASE_PATH) as connection:
@@ -110,6 +111,7 @@ class ChatCommands(commands.Cog):
                 ),
             )
 
+        await OsuAPI.close_session()
         return osu_id, profile, None
 
     async def handle_recent(
@@ -194,6 +196,7 @@ class ChatCommands(commands.Cog):
 
                 embed = ScoreEmbed.recent(score)
 
+                await OsuAPI.close_session()
                 await message.reply(
                     embed=embed,
                     mention_author=False,
@@ -302,6 +305,7 @@ class ChatCommands(commands.Cog):
                     scores=scores,
                 )
 
+                await OsuAPI.close_session()
                 await message.reply(
                     embed=embed,
                     mention_author=False,

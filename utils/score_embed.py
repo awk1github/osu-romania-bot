@@ -31,15 +31,10 @@ class ScoreEmbed:
         return f"{minutes}:{remaining:02d}"
 
     @staticmethod
-    def recent(score: dict[str, Any]) -> discord.Embed:
+    def recent(score: dict[str, Any], fc_pp) -> discord.Embed:
         beatmap = score.get("beatmap") or {}
         beatmapset = score.get("beatmapset") or {}
         user = score.get("user") or {}
-        pp = (
-            f"{score['pp']:.2f}pp"
-            if score.get("pp") is not None
-            else "Unranked"
-        )
         mod_acronyms = []
 
         for mod in score.get("mods", []):
@@ -126,8 +121,9 @@ class ScoreEmbed:
                 pass
 
         pp_value = score.get("pp")
+
         pp_text = (
-            f"{ScoreEmbed._float(pp_value):.2f}pp"
+            f"{ScoreEmbed._float(pp_value):.2f}pp/{ScoreEmbed._float(fc_pp):.2f}pp"
             if pp_value is not None
             else "Unranked"
         )
