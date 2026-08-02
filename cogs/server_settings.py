@@ -859,8 +859,6 @@ class ServerSettings(commands.Cog):
             else:
                 skipped += 1
 
-            await OsuAPI.close_session()
-
         embed = EmbedFactory.success(
             "Rank Roles Refreshed",
             (

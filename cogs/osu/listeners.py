@@ -45,7 +45,6 @@ class Listeners(commands.Cog):
             )
             return
 
-        await OsuAPI.close_session()
         if beatmap is None:
             print("Beatmap API returned no data.")
             return

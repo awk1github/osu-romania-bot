@@ -320,7 +320,6 @@ class Profile(commands.Cog):
             user=user,
         )
 
-        await OsuAPI.close_session()
         await interaction.followup.send(
             embed=embed,
             view=view,
@@ -451,7 +450,6 @@ class Profile(commands.Cog):
                 f"Current global rank: **#{global_rank:,}**"
             )
 
-        await OsuAPI.close_session()
         await interaction.followup.send(
             embed=EmbedFactory.success(
                 "Rank Role Refreshed",
