@@ -1,8 +1,12 @@
 import sqlite3
 import discord
+import asyncio
+import json
+import os
 
 from discord.ext import commands
 from discord import app_commands
+from dotenv import load_dotenv
 
 from utils.osu_api import OsuAPI
 from utils.embeds import EmbedFactory
@@ -10,7 +14,9 @@ from utils.score_embed import ScoreEmbed
 from utils.emojis import RANK_EMOJIS
 from views.pagination import PaginationView
 
-GUILD_ID = 1473125019692564542
+load_dotenv()
+
+GUILD_ID = int(os.getenv("GUILD_ID"))
 
 
 class Scores(commands.Cog):
@@ -114,17 +120,18 @@ class Scores(commands.Cog):
             if full_score is not None:
                 score = full_score
 
-            print(score)
+            # print(score)
 
             if profile is not None:
                 score["user"] = profile
 
-            fc_pp = await OsuAPI.calculate_fc_pp(score)
-            print("FC PP:", fc_pp)
-            print("Mods:", score.get("mods"))
-            print("Accuracy:", score.get("accuracy"))
+            fc_pp = await OsuAPI.calculate_fc_pp(json.dumps(score))
+            # print("FC PP:", fc_pp)
+            # print("Mods:", score.get("mods"))
+            # print("Accuracy:", score.get("accuracy"))
 
-            embed = ScoreEmbed.recent(score)
+            embed = ScoreEmbed.recent(score, fc_pp=fc_pp)
+            await OsuAPI.close_session()
             await interaction.followup.send(embed=embed)
 
         except Exception as error:
@@ -214,6 +221,7 @@ class Scores(commands.Cog):
                 "The player's profile could not be loaded.",
             )
 
+            await OsuAPI.close_session()
             await interaction.followup.send(embed=embed)
             return
 
@@ -243,6 +251,7 @@ class Scores(commands.Cog):
             callback=build_page,
         )
 
+        await OsuAPI.close_session()
         message = await interaction.followup.send(
             embed=embed,
             view=view,

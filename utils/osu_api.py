@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import time
+import json
 
 from typing import Any
 from urllib.parse import quote
@@ -41,7 +42,7 @@ class OsuAPI:
         async with cls.SESSION_LOCK:
             if cls.SESSION is None or cls.SESSION.closed:
                 connector = aiohttp.TCPConnector(
-                    limit=10,
+                    limit=100,
                     limit_per_host=5,
                     ttl_dns_cache=300,
                 )
@@ -370,15 +371,16 @@ class OsuAPI:
         return data
 
     @staticmethod
-    async def calculate_fc_pp(score: dict) -> float | None:
-        beatmap = score.get("beatmap") or {}
+    async def calculate_fc_pp(score) -> float | None:
+        # beatmap = score.get("beatmap") or {}
 
-        beatmap_id = beatmap.get("id")
+        req = json.loads(score)
+        beatmap_id = req["beatmap"]["id"]
 
         if beatmap_id is None:
             return None
 
-        beatmap_bytes = await OsuAPI.get_beatmap_file(int(beatmap_id))
+        beatmap_bytes = await OsuAPI.get_beatmap_file(beatmap_id)
 
         if beatmap_bytes is None:
             return None
@@ -386,12 +388,19 @@ class OsuAPI:
         def calculate():
             beatmap = rosu_pp_py.Beatmap(bytes=beatmap_bytes)
 
-            mods = "".join(score.get("mods") or [])
+            mods = json.dumps(req["mods"])
+
+            lazer = False
+            if mods.find("CL") == False:
+                lazer = True
 
             performance = rosu_pp_py.Performance(
                 mods=mods,
-                accuracy=(score.get("accuracy") or 0) * 100,
+                accuracy=100, # (req["accuracy"] or 0) * 100
+                combo=req["beatmap"]["max_combo"],
+                lazer=lazer,
                 misses=0,
+                hitresult_priority=rosu_pp_py.HitResultPriority.BestCase,
             )
 
             return performance.calculate(beatmap).pp

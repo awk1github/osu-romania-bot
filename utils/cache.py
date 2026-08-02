@@ -41,5 +41,6 @@ async def refresh_player(osu_id: int):
         )
     )
 
+    await OsuAPI.close_session()
     connection.commit()
     connection.close()

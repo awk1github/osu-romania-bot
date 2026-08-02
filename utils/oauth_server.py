@@ -1,6 +1,7 @@
 import html
 import os
 import sqlite3
+from dotenv import load_dotenv
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ import discord
 from discord.ext import commands
 from utils.rank_roles import RankRoleService
 
+load_dotenv()
 
 DATABASE_PATH = (
     Path(__file__).resolve().parent.parent

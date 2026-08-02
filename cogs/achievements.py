@@ -26,7 +26,7 @@ print("Readable:", os.access(DATABASE_PATH, os.R_OK))
 print("Writable:", os.access(DATABASE_PATH, os.W_OK))
 
 CHECK_INTERVAL_MINUTES = 15
-REQUEST_DELAY_SECONDS = 1
+REQUEST_DELAY_SECONDS = 2
 
 PLAY_PP_MILESTONES = (
     100,
@@ -123,10 +123,16 @@ class Achievements(commands.Cog):
         self.check_achievements.cancel()
 
     async def fetch_profile(self, osu_id: int) -> dict[str, Any]:
-        return await OsuAPI.get_user(osu_id)
+        user = await OsuAPI.get_user(osu_id)
+        await asyncio.sleep(0.3)
+        await OsuAPI.close_session()
+        return user
 
     async def fetch_top_10(self, osu_id: int) -> list[dict[str, Any]]:
-        return await OsuAPI.get_top(osu_id, limit=5)
+        top = await OsuAPI.get_top(osu_id, limit=5)
+        await asyncio.sleep(0.3)
+        await OsuAPI.close_session()
+        return top
     
     def build_test_achievement_embed(
         self,
@@ -225,6 +231,10 @@ class Achievements(commands.Cog):
         return embed
     
     @app_commands.checks.has_permissions(administrator=True)
+    #@app_commands.command(
+    #    name="test-achivement",
+    #    description="test the embed"
+    #)
     async def test_achievement(
             self,
             interaction: discord.Interaction,
@@ -332,7 +342,7 @@ class Achievements(commands.Cog):
         self,
         guild_id: int,
     ) -> int | None:
-        with sqlite3.connect(DATABASE_PATH, timeout=30) as connection:
+        with sqlite3.connect(DATABASE_PATH, timeout=15.0) as connection:
             row = connection.execute(
                 """
                 SELECT achievement_channel_id
@@ -1010,7 +1020,7 @@ class Achievements(commands.Cog):
     print("Opening:", DATABASE_PATH)
 
     def get_snapshot(self, osu_id: int) -> Snapshot | None:
-        with sqlite3.connect(DATABASE_PATH, timeout=30) as connection:
+        with sqlite3.connect(DATABASE_PATH, timeout=15.0) as connection:
             connection.row_factory = sqlite3.Row
 
             row = connection.execute(
@@ -1052,7 +1062,7 @@ class Achievements(commands.Cog):
         )
 
     def save_snapshot(self, snapshot: Snapshot) -> None:
-        with sqlite3.connect(DATABASE_PATH, timeout=30) as connection:
+        with sqlite3.connect(DATABASE_PATH, timeout=15.0) as connection:
             connection.execute(
                 """
                 INSERT INTO achievement_snapshots (
@@ -1095,7 +1105,7 @@ class Achievements(commands.Cog):
     # ------------------------------------------------------------------
 
     def get_linked_users(self) -> list[LinkedUser]:
-        with sqlite3.connect(DATABASE_PATH, timeout=30) as connection:
+        with sqlite3.connect(DATABASE_PATH, timeout=15.0) as connection:
             connection.row_factory = sqlite3.Row
 
             rows = connection.execute(
@@ -1119,7 +1129,7 @@ class Achievements(commands.Cog):
         ]
 
     def get_achievement_channels(self) -> list[tuple[int, int]]:
-        with sqlite3.connect(DATABASE_PATH, timeout=30) as connection:
+        with sqlite3.connect(DATABASE_PATH, timeout=15.0) as connection:
             rows = connection.execute(
                 """
                 SELECT
@@ -1143,7 +1153,7 @@ class Achievements(commands.Cog):
         event_key: str,
     ) -> bool:
         try:
-            with sqlite3.connect(DATABASE_PATH, timeout=30) as connection:
+            with sqlite3.connect(DATABASE_PATH, timeout=15.0) as connection:
                 connection.execute(
                     """
                     INSERT INTO achievement_events (

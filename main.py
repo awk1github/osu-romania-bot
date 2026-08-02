@@ -11,7 +11,7 @@ from utils.osu_api import OsuAPI
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
-GUILD_ID = 1473125019692564542
+GUILD_ID = int(os.getenv("GUILD_ID"))
 
 intents = discord.Intents.default()
 intents.members = True
