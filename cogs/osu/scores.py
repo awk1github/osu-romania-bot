@@ -80,6 +80,7 @@ class Scores(commands.Cog):
 
             profile = await OsuAPI.get_user(osu_id)
             score = await OsuAPI.get_recent(osu_id)
+            await OsuAPI.close_session()
 
             if score is None:
                 embed = EmbedFactory.info(
@@ -131,7 +132,6 @@ class Scores(commands.Cog):
             # print("Accuracy:", score.get("accuracy"))
 
             embed = ScoreEmbed.recent(score, fc_pp=fc_pp)
-            await OsuAPI.close_session()
             await interaction.followup.send(embed=embed)
 
         except Exception as error:
