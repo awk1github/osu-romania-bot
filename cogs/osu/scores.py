@@ -80,7 +80,6 @@ class Scores(commands.Cog):
 
             profile = await OsuAPI.get_user(osu_id)
             score = await OsuAPI.get_recent(osu_id)
-            await OsuAPI.close_session()
 
             if score is None:
                 embed = EmbedFactory.info(
