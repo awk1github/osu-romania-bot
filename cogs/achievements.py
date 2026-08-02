@@ -124,14 +124,10 @@ class Achievements(commands.Cog):
 
     async def fetch_profile(self, osu_id: int) -> dict[str, Any]:
         user = await OsuAPI.get_user(osu_id)
-        await asyncio.sleep(0.3)
-        await OsuAPI.close_session()
         return user
 
     async def fetch_top_10(self, osu_id: int) -> list[dict[str, Any]]:
         top = await OsuAPI.get_top(osu_id, limit=5)
-        await asyncio.sleep(0.3)
-        await OsuAPI.close_session()
         return top
     
     def build_test_achievement_embed(
