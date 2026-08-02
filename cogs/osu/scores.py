@@ -220,7 +220,6 @@ class Scores(commands.Cog):
                 "The player's profile could not be loaded.",
             )
 
-            await OsuAPI.close_session()
             await interaction.followup.send(embed=embed)
             return
 
@@ -250,7 +249,6 @@ class Scores(commands.Cog):
             callback=build_page,
         )
 
-        await OsuAPI.close_session()
         message = await interaction.followup.send(
             embed=embed,
             view=view,

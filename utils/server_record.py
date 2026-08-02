@@ -74,5 +74,4 @@ class ServerRecord:
         score["_linked_osu_username"] = linked_user["osu_username"]
         score["_leaderboard_position"] = response.get("position")
 
-        await OsuAPI.close_session()
         return score

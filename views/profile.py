@@ -120,7 +120,6 @@ class ProfileView(discord.ui.View):
 
         self.current_tab = "top"
         self.update_buttons()
-        await OsuAPI.close_session()
         await interaction.edit_original_response(
             embed=embed,
             view=self,
@@ -155,7 +154,6 @@ class ProfileView(discord.ui.View):
         self.current_tab = "recent"
         self.update_buttons()
 
-        await OsuAPI.close_session()
         await interaction.edit_original_response(
             embed=embed,
             view=self,
