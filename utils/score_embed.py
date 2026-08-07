@@ -127,36 +127,28 @@ class ScoreEmbed:
         pp_value = score.get("pp")
 
         if pp_value is not None:
-            pp_parts = [
-                f"{ScoreEmbed._float(pp_value):.2f}pp"
-            ]
-
-            if fc_pp is not None:
-                pp_parts.append(
-                    f"{ScoreEmbed._float(fc_pp):.2f}pp (--IF FC--)"
-                )
+            pp_text = f"{ScoreEmbed._float(pp_value):.2f}pp"
 
             if ss_pp is not None:
-                pp_parts.append(
-                    f"{ScoreEmbed._float(ss_pp):.2f}pp (--SS--)"
-                )
-
-            pp_text = " / ".join(pp_parts)
-
-        elif fc_pp is not None or ss_pp is not None:
-            pp_parts = []
+                pp_text += f" / {ScoreEmbed._float(ss_pp):.2f}pp"
 
             if fc_pp is not None:
-                pp_parts.append(
-                    f"{ScoreEmbed._float(fc_pp):.2f}pp (--IF FC--)"
-                )
+                pp_text += f" ({ScoreEmbed._float(fc_pp):.2f}pp IF FC)"
+
+        elif ss_pp is not None or fc_pp is not None:
+            parts = []
 
             if ss_pp is not None:
-                pp_parts.append(
-                    f"{ScoreEmbed._float(ss_pp):.2f}pp (--SS--)"
+                parts.append(
+                    f"{ScoreEmbed._float(ss_pp):.2f}pp"
                 )
 
-            pp_text = " / ".join(pp_parts)
+            if fc_pp is not None:
+                parts.append(
+                    f"({ScoreEmbed._float(fc_pp):.2f}pp IF FC)"
+                )
+
+            pp_text = " ".join(parts)
 
         else:
             pp_text = "PP unavailable"
