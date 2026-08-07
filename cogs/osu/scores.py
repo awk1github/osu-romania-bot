@@ -1,14 +1,20 @@
 import sqlite3
 import discord
+import os
 
 from discord.ext import commands
 from discord import app_commands
+from dotenv import load_dotenv
 
 from utils.osu_api import OsuAPI
 from utils.embeds import EmbedFactory
 from utils.score_embed import ScoreEmbed
+from utils.emojis import RANK_EMOJIS
+from views.pagination import PaginationView
 
-GUILD_ID = 1473125019692564542
+load_dotenv()
+
+GUILD_ID = int(os.getenv("GUILD_ID"))
 
 
 class Scores(commands.Cog):
@@ -26,7 +32,8 @@ class Scores(commands.Cog):
         interaction: discord.Interaction,
         username: str | None = None,
     ):
-        await interaction.response.defer()
+        if not interaction.response.is_done():
+            await interaction.response.defer()
 
         try:
             if username is None:
@@ -69,7 +76,8 @@ class Scores(commands.Cog):
 
                 osu_id = user["id"]
 
-            score = await OsuAPI.get_recent(osu_id)
+            profile = await OsuAPI.get_user(osu_id)
+            score = await OsuAPI.get_recent(osu_id, include_fails=True)
 
             if score is None:
                 embed = EmbedFactory.info(
@@ -110,9 +118,35 @@ class Scores(commands.Cog):
             if full_score is not None:
                 score = full_score
 
-            print(score)
+            # print(score)
 
-            embed = ScoreEmbed.recent(score)
+            if profile is not None:
+                score["user"] = profile
+
+            if not score.get("beatmap") or not score.get("beatmapset"):
+                score = await OsuAPI.enrich_score(
+                    score,
+                    include_user=False,
+                    include_beatmap=True,
+                    include_beatmapset=True,
+                )
+
+                if profile is not None:
+                    score["user"] = profile
+
+            local_pp, fc_pp, ss_pp = await OsuAPI.calculate_pp_values(score)
+
+            # osu! does not always return PP for unranked/loved maps.
+            # Use the local rosu-pp calculation as a fallback.
+            if score.get("pp") is None and local_pp is not None:
+                score["pp"] = local_pp
+
+            embed = ScoreEmbed.recent(
+                score,
+                fc_pp=fc_pp,
+                ss_pp=ss_pp,
+            )
+
             await interaction.followup.send(embed=embed)
 
         except Exception as error:
@@ -138,7 +172,8 @@ class Scores(commands.Cog):
         interaction: discord.Interaction,
         username: str = None
     ):
-        await interaction.response.defer()
+        if not interaction.response.is_done():
+            await interaction.response.defer()
 
         if username is None:
 
@@ -179,12 +214,15 @@ class Scores(commands.Cog):
 
             osu_id = user["id"]
 
-        scores = await OsuAPI.get_top(osu_id)
+        scores = await OsuAPI.get_top(
+            osu_id,
+            limit=100,
+        )
 
         if not scores:
             embed = EmbedFactory.info(
                 "No Scores",
-                "No top scores were found."
+                "No top scores were found.",
             )
 
             await interaction.followup.send(embed=embed)
@@ -192,9 +230,48 @@ class Scores(commands.Cog):
 
         user = await OsuAPI.get_user(osu_id)
 
-        embed = ScoreEmbed.top(user, scores)
+        if user is None:
+            embed = EmbedFactory.error(
+                "Player Error",
+                "The player's profile could not be loaded.",
+            )
 
-        await interaction.followup.send(embed=embed)
+            await interaction.followup.send(embed=embed)
+            return
+
+        per_page = 5
+
+        max_pages = max(
+            1,
+            (len(scores) + per_page - 1) // per_page,
+        )
+
+
+        async def build_page(page: int) -> discord.Embed:
+            return ScoreEmbed.top(
+                user=user,
+                scores=scores,
+                page=page,
+                per_page=per_page,
+            )
+
+
+        embed = await build_page(1)
+
+        view = PaginationView(
+            author_id=interaction.user.id,
+            current_page=1,
+            max_pages=max_pages,
+            callback=build_page,
+        )
+
+        message = await interaction.followup.send(
+            embed=embed,
+            view=view,
+            wait=True,
+        )
+
+        view.message = message
 
 
 async def setup(bot):

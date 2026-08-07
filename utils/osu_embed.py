@@ -1,88 +1,161 @@
 import discord
+from datetime import datetime, UTC
 
 
 class OsuEmbed:
 
     @staticmethod
-    def profile(user: dict) -> discord.Embed:
+    def profile(
+        user: dict,
+        county=None,
+    ) -> discord.Embed:
 
-        stats = user["statistics"]
+        stats = user.get("statistics") or {}
 
-        global_rank = (
-            f"#{stats['global_rank']:,}"
-            if stats["global_rank"] is not None
-            else "Unranked"
+        def format_rank(value) -> str:
+            if value is None:
+                return "Unranked"
+
+            return f"#{value:,}"
+
+        def country_code_to_flag(
+            country_code: str | None,
+        ) -> str:
+            if not country_code or len(country_code) != 2:
+                return "🌐"
+
+            return "".join(
+                chr(ord(character) + 127397)
+                for character in country_code.upper()
+            )
+
+        pp = stats.get("pp") or 0
+        accuracy = stats.get("hit_accuracy") or 0
+        play_count = stats.get("play_count") or 0
+        play_time = stats.get("play_time") or 0
+        ranked_score = stats.get("ranked_score") or 0
+        total_score = stats.get("total_score") or 0
+
+        level_data = stats.get("level") or {}
+        level = level_data.get("current", 0)
+        level_progress = level_data.get("progress", 0)
+
+        global_rank = format_rank(
+            stats.get("global_rank")
         )
 
-        country_rank = (
-            f"#{stats['country_rank']:,}"
-            if stats["country_rank"] is not None
-            else "Unranked"
+        country_rank = format_rank(
+            stats.get("country_rank")
         )
+
+        country_code = (
+            user.get("country_code")
+            or (user.get("country") or {}).get("code")
+        )
+
+        country_name = (
+            (user.get("country") or {}).get("name")
+            or country_code
+            or "Country"
+        )
+
+        country_flag = country_code_to_flag(
+            country_code
+        )
+
+        county_line = "📍 County: Not assigned"
+
+        if county is not None:
+            try:
+                county_name = county["county_name"]
+                county_rank = format_rank(
+                    county["county_rank"]
+                )
+
+                county_line = (
+                    f"📍 {county_name}: {county_rank}"
+                )
+            except (KeyError, TypeError, IndexError):
+                pass
+
+        join_date = user.get("join_date")
+        joined_text = "Unknown"
+
+        if join_date:
+            try:
+                joined_datetime = datetime.fromisoformat(
+                    join_date.replace("Z", "+00:00")
+                ).astimezone(UTC)
+
+                joined_text = joined_datetime.strftime(
+                    "%d %B %Y"
+                )
+
+            except (ValueError, TypeError):
+                joined_text = str(join_date)[:10]
 
         embed = discord.Embed(
-            title=f"🎵 {user['username']}",
-            url=f"https://osu.ppy.sh/users/{user['id']}",
-            color=discord.Color.pink()
-        )
-
-        embed.set_thumbnail(url=user["avatar_url"])
-
-        cover = user.get("cover_url")
-        if cover:
-            embed.set_image(url=cover)
-
-        embed.add_field(
-            name="⭐ Performance",
-            value=(
-                f"**PP:** {stats['pp']:,.0f}\n"
-                f"**Accuracy:** {stats['hit_accuracy']:.2f}%\n"
-                f"**Level:** {stats['level']['current']}"
+            title=user["username"],
+            url=(
+                f"https://osu.ppy.sh/users/"
+                f"{user['id']}"
             ),
-            inline=True
-        )
-
-        embed.add_field(
-            name="🏆 Rankings",
-            value=(
-                f"**Global:** {global_rank}\n"
-                f"**Country:** {country_rank}"
+            description=(
+                f"💎 **{pp:,.0f}pp** • "
+                f"⭐ **Level {level} "
+                f"({level_progress}%)**"
             ),
-            inline=True
-        )
-
-        embed.add_field(
-            name="🎮 Activity",
-            value=(
-                f"**Play Count:** {stats['play_count']:,}\n"
-                f"**Play Time:** {stats['play_time'] // 3600:,} hours"
+            color=discord.Color.from_rgb(
+                255,
+                102,
+                170,
             ),
-            inline=False
         )
 
+        # First row: Rankings and Performance
         embed.add_field(
-            name="📊 Scores",
+            name="📊 Rankings",
             value=(
-                f"**Ranked:** {stats['ranked_score']:,}\n"
-                f"**Total:** {stats['total_score']:,}"
+                f"🌍 Global: **{global_rank}**\n"
+                f"{country_flag} {country_name}: "
+                f"**{country_rank}**\n"
+                f"{county_line}"
             ),
-            inline=True
+            inline=True,
         )
 
         embed.add_field(
-            name="🌍 Country",
-            value=f"{user['country']['name']} ({user['country_code']})",
-            inline=True
+            name="🎯 Performance",
+            value=(
+                f"Accuracy: **{accuracy:.2f}%**\n"
+                f"Plays: **{play_count:,}**\n"
+                f"Play Time: **{play_time // 3600:,}h**"
+            ),
+            inline=True,
         )
 
         embed.add_field(
-            name="📅 Joined",
-            value=user["join_date"][:10],
-            inline=True
+            name="🏆 Scores",
+            value=(
+                f"Ranked: **{ranked_score:,}**\n"
+                f"Total: **{total_score:,}**"
+            ),
+            inline=True,
         )
+
+        avatar_url = user.get("avatar_url")
+
+        if avatar_url:
+            embed.set_thumbnail(
+                url=avatar_url
+            )
 
         embed.set_footer(
-            text=f"osu! ID: {user['id']}"
+            text=(
+                f"osu!Romania • "
+                f"Joined: {joined_text} • "
+                f"osu! ID: {user['id']}"
+            )
         )
 
         return embed

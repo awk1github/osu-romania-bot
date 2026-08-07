@@ -120,7 +120,6 @@ class ProfileView(discord.ui.View):
 
         self.current_tab = "top"
         self.update_buttons()
-
         await interaction.edit_original_response(
             embed=embed,
             view=self,

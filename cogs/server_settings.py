@@ -5,11 +5,16 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+import os
+from dotenv import load_dotenv
+
 from utils.embeds import EmbedFactory
 from utils.osu_api import OsuAPI
 from utils.rank_roles import RankRoleService
 
-GUILD_ID = 1473125019692564542
+load_dotenv()
+
+GUILD_ID = int(os.getenv("GUILD_ID"))
 
 DATABASE_PATH = (
     Path(__file__).resolve().parent.parent
@@ -925,7 +930,7 @@ class ServerSettings(commands.Cog):
                     description=(
                         f"Welcome to **{member.guild.name}**, "
                         f"{member.mention}!\n\n"
-                        "We hope you enjoy your stay."
+                        "To have access to our server, you will need to /link your osu! account!"
                     ),
                     color=discord.Color.green(),
                 )

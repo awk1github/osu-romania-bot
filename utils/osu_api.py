@@ -4,10 +4,14 @@ import asyncio
 import logging
 import os
 import time
+import json
+
 from typing import Any
 from urllib.parse import quote
+from collections import OrderedDict
 
 import aiohttp
+import rosu_pp_py
 
 
 logger = logging.getLogger(__name__)
@@ -16,6 +20,8 @@ ACCESS_TOKEN: str | None = None
 TOKEN_EXPIRES = 0.0
 TOKEN_LOCK = asyncio.Lock()
 
+BEATMAP_CACHE: OrderedDict[int, bytes] = OrderedDict()
+BEATMAP_CACHE_LIMIT = 128
 
 class OsuAPI:
     """Small asynchronous wrapper around the public osu! API v2."""
@@ -24,6 +30,36 @@ class OsuAPI:
     TOKEN_URL = "https://osu.ppy.sh/oauth/token"
     API_VERSION = "20220705"
     REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=20)
+
+    SESSION: aiohttp.ClientSession | None = None
+    SESSION_LOCK = asyncio.Lock()
+
+    @classmethod
+    async def get_session(cls) -> aiohttp.ClientSession:
+        if cls.SESSION is not None and not cls.SESSION.closed:
+            return cls.SESSION
+
+        async with cls.SESSION_LOCK:
+            if cls.SESSION is None or cls.SESSION.closed:
+                connector = aiohttp.TCPConnector(
+                    limit=100,
+                    limit_per_host=5,
+                    ttl_dns_cache=300,
+                )
+
+                cls.SESSION = aiohttp.ClientSession(
+                    timeout=cls.REQUEST_TIMEOUT,
+                    connector=connector,
+                )
+
+        return cls.SESSION
+
+    @classmethod
+    async def close_session(cls) -> None:
+        if cls.SESSION is not None and not cls.SESSION.closed:
+            await cls.SESSION.close()
+
+        cls.SESSION = None
 
     @staticmethod
     async def get_access_token(force_refresh: bool = False) -> str | None:
@@ -61,23 +97,22 @@ class OsuAPI:
             }
 
             try:
-                async with aiohttp.ClientSession(
-                    timeout=OsuAPI.REQUEST_TIMEOUT
-                ) as session:
-                    async with session.post(
-                        OsuAPI.TOKEN_URL,
-                        json=payload,
-                    ) as response:
-                        if response.status != 200:
-                            body = await response.text()
-                            logger.error(
-                                "osu! OAuth failed with HTTP %s: %s",
-                                response.status,
-                                body[:500],
-                            )
-                            return None
+                session = await OsuAPI.get_session()
 
-                        data = await response.json()
+                async with session.post(
+                    OsuAPI.TOKEN_URL,
+                    json=payload,
+                ) as response:
+                    if response.status != 200:
+                        body = await response.text()
+                        logger.error(
+                            "osu! OAuth failed with HTTP %s: %s",
+                            response.status,
+                            body[:500],
+                        )
+                        return None
+
+                    data = await response.json()
 
             except (aiohttp.ClientError, asyncio.TimeoutError):
                 logger.exception("Failed to request an osu! OAuth token.")
@@ -121,14 +156,13 @@ class OsuAPI:
             }
 
             try:
-                async with aiohttp.ClientSession(
-                    timeout=OsuAPI.REQUEST_TIMEOUT
-                ) as session:
-                    async with session.get(
-                        url,
-                        headers=headers,
-                        params=params,
-                    ) as response:
+                session = await OsuAPI.get_session()
+
+                async with session.get(
+                    url,
+                    headers=headers,
+                    params=params,
+                ) as response:
                         if response.status == 401 and attempt == 0:
                             continue
 
@@ -312,6 +346,187 @@ class OsuAPI:
         return await OsuAPI.api_get(
             f"scores/{mode}/{score_id}"
         )
+
+    @staticmethod
+    async def get_beatmap_file(beatmap_id: int) -> bytes | None:
+        if beatmap_id in BEATMAP_CACHE:
+            BEATMAP_CACHE.move_to_end(beatmap_id)
+            return BEATMAP_CACHE[beatmap_id]
+
+        url = f"https://osu.ppy.sh/osu/{beatmap_id}"
+
+        session = await OsuAPI.get_session()
+
+        async with session.get(url) as response:
+            if response.status != 200:
+                return None
+
+            data = await response.read()
+
+        BEATMAP_CACHE[beatmap_id] = data
+
+        if len(BEATMAP_CACHE) > BEATMAP_CACHE_LIMIT:
+            BEATMAP_CACHE.popitem(last=False)
+
+        return data
+
+    @staticmethod
+    async def calculate_pp_values(
+        score: dict[str, Any],
+    ) -> tuple[float | None, float | None, float | None]:
+        """
+        Calculate:
+        1. PP for the actual play.
+        2. PP if the play was FC'd at the same accuracy.
+
+        This allows PP to be displayed even when osu!'s API doesn't
+        provide PP, such as on unranked/loved maps.
+        """
+        beatmap = score.get("beatmap") or {}
+        beatmap_id = beatmap.get("id") or score.get("beatmap_id")
+
+        if beatmap_id is None:
+            return None, None, None
+
+        beatmap_bytes = await OsuAPI.get_beatmap_file(int(beatmap_id))
+        if beatmap_bytes is None:
+            return None, None, None
+
+        mods = score.get("mods") or []
+
+        mod_acronyms: set[str] = set()
+
+        for mod in mods:
+            if isinstance(mod, str):
+                mod_acronyms.add(mod.upper())
+
+            elif isinstance(mod, dict):
+                acronym = mod.get("acronym")
+
+                if acronym:
+                    mod_acronyms.add(str(acronym).upper())
+
+        # Classic/stable scores contain CL.
+        # Scores without CL use lazer scoring.
+        lazer = "CL" not in mod_acronyms
+
+        try:
+            accuracy = float(score.get("accuracy") or 0.0) * 100.0
+        except (TypeError, ValueError):
+            accuracy = 0.0
+
+        accuracy = max(0.0, min(100.0, accuracy))
+
+        statistics = score.get("statistics") or {}
+
+        def get_stat(*names: str) -> int:
+            for name in names:
+                value = statistics.get(name)
+
+                if value is not None:
+                    try:
+                        return int(value)
+                    except (TypeError, ValueError):
+                        return 0
+
+            return 0
+
+        n300 = get_stat("great", "count_300")
+        n100 = get_stat("ok", "count_100")
+        n50 = get_stat("meh", "count_50")
+        misses = get_stat("miss", "count_miss")
+
+        combo = score.get("max_combo")
+
+        if combo is None:
+            combo = score.get("maximum_combo")
+
+        try:
+            combo = int(combo) if combo is not None else None
+        except (TypeError, ValueError):
+            combo = None
+
+        def calculate() -> tuple[float | None, float | None]:
+            parsed_map = rosu_pp_py.Beatmap(bytes=beatmap_bytes)
+
+            if parsed_map.is_suspicious():
+                return None, None, None
+
+            common = {
+                "mods": mods,
+                "lazer": lazer,
+                "hitresult_priority": (
+                    rosu_pp_py.HitResultPriority.BestCase
+                ),
+            }
+
+            current_args = {
+                **common,
+                "n300": n300,
+                "n100": n100,
+                "n50": n50,
+                "misses": misses,
+            }
+
+            if combo is not None:
+                current_args["combo"] = combo
+
+            current_pp = rosu_pp_py.Performance(
+                **current_args,
+            ).calculate(parsed_map).pp
+
+
+            # IF FC:
+            # Treat every miss as a 300 while preserving the existing
+            # 100s and 50s. This also naturally recalculates accuracy.
+            fc_n300 = n300 + misses
+
+            fc_pp = rosu_pp_py.Performance(
+                mods=mods,
+                n300=fc_n300,
+                n100=n100,
+                n50=n50,
+                misses=0,
+                lazer=lazer,
+                hitresult_priority=(
+                    rosu_pp_py.HitResultPriority.BestCase
+                ),
+            ).calculate(parsed_map).pp
+
+            ss_pp = rosu_pp_py.Performance(
+                mods=mods,
+                accuracy=100.0,
+                misses=0,
+                lazer=lazer,
+                hitresult_priority=(
+                    rosu_pp_py.HitResultPriority.BestCase
+                ),
+            ).calculate(parsed_map).pp
+
+            return current_pp, fc_pp, ss_pp
+
+        try:
+            return await asyncio.to_thread(calculate)
+
+        except Exception:
+            logger.exception(
+                "PP calculation failed for beatmap %s",
+                beatmap_id,
+            )
+
+            return None, None, None
+
+    @staticmethod
+    async def calculate_fc_pp(score) -> float | None:
+        """
+        Compatibility wrapper for existing callers.
+        """
+        if isinstance(score, str):
+            score = json.loads(score)
+
+        _, fc_pp, _ = await OsuAPI.calculate_pp_values(score)
+
+        return fc_pp
 
     # BEATMAPS
 

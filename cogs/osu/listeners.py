@@ -5,7 +5,6 @@ from discord.ext import commands
 
 from utils.beatmap_embed import BeatmapEmbed
 from utils.osu_api import OsuAPI
-from utils.server_record import ServerRecord
 
 
 BEATMAP_REGEX = re.compile(
@@ -51,22 +50,8 @@ class Listeners(commands.Cog):
             return
 
         try:
-            server_records = await ServerRecord.get_top_for_beatmap(
-                beatmap_id=beatmap_id,
-                limit=3
-            )
-
-        except Exception as error:
-            print(
-                f"Server leaderboard error: "
-                f"{type(error).__name__}: {error}"
-            )
-            server_records = []
-
-        try:
             embed = BeatmapEmbed.create(
                 beatmap=beatmap,
-                server_records=server_records
             )
 
         except Exception as error:

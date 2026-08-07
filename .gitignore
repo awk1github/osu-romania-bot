@@ -77,7 +77,7 @@ dist/
 **/venv/
 
 # ==========================
-# Ignore nested .env files
+# Ignore .env files
 # ==========================
 **/.env
 **/.env.*

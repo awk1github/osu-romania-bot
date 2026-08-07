@@ -1,4 +1,5 @@
 import sqlite3
+import os
 
 import discord
 from discord import app_commands
@@ -9,6 +10,11 @@ from utils.embeds import EmbedFactory
 from utils.osu_api import OsuAPI
 from utils.osu_embed import OsuEmbed
 from views.profile import ProfileView
+from utils.osu_oauth import OsuOAuth
+from utils.rank_roles import RankRoleService
+from utils.counties import CountyService
+
+MEMBER_ROLE_ID = int(os.getenv("MEMBER_ROLE_ID", "0"))
 
 
 DATABASE_PATH = "database/bot.db"
@@ -21,85 +27,170 @@ class Profile(commands.Cog):
     ) -> None:
         self.bot = bot
 
-    # --------------------------------------------------
-    # LINK
-    # --------------------------------------------------
-
     @app_commands.command(
         name="link",
-        description="Link your osu! account.",
+        description="Verify and link your osu! account.",
     )
     async def link(
         self,
         interaction: discord.Interaction,
-        username: str,
     ) -> None:
-        await interaction.response.defer()
 
-        user = await OsuAPI.get_user(username)
+            if interaction.guild is None:
+                await interaction.response.send_message(
+                    embed=EmbedFactory.error(
+                        "Server Only",
+                        "Use this command inside the Discord server.",
+                    ),
+                    ephemeral=True,
+                )
+                return
 
-        if user is None:
-            embed = EmbedFactory.error(
-                "Player Not Found",
-                "That osu! player doesn't exist.",
+            # Check whether this Discord account is already linked.
+            with sqlite3.connect("database/bot.db") as connection:
+                existing_account = connection.execute(
+                    """
+                    SELECT osu_id, osu_username
+                    FROM osu_accounts
+                    WHERE discord_id = ?
+                    """,
+                    (interaction.user.id,),
+                ).fetchone()
+
+            if existing_account is not None:
+                _, osu_username = existing_account
+
+                await interaction.response.send_message(
+                    embed=EmbedFactory.info(
+                        "Account Already Linked",
+                        (
+                            "Your Discord account is already linked to "
+                            f"**{osu_username}**."
+                        ),
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            try:
+                authorization_url = (
+                    OsuOAuth.create_authorization_url(
+                        discord_id=interaction.user.id,
+                        guild_id=interaction.guild.id,
+                    )
+                )
+            except Exception as error:
+                import traceback
+
+                traceback.print_exc()
+
+                await interaction.response.send_message(
+                    embed=EmbedFactory.error(
+                        "Verification Unavailable",
+                        (
+                            "The verification link could not be created.\n\n"
+                            f"```text\n{type(error).__name__}: {error}\n```"
+                        ),
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            view = discord.ui.View(timeout=600)
+
+            view.add_item(
+                discord.ui.Button(
+                    label="Link osu! account",
+                    style=discord.ButtonStyle.link,
+                    url=authorization_url,
+                    emoji="🔗",
+                )
             )
 
-            await interaction.followup.send(
-                embed=embed
+            embed = discord.Embed(
+                title="Verify your osu! account",
+                description=(
+                    "Press the button below and authorize the "
+                    "osu!Romania application.\n\n"
+                    "After verification, you will receive the "
+                    "**Member** role and gain access to the server.\n\n"
+                    "This link expires in **10 minutes**."
+                ),
+                color=discord.Color.blurple(),
             )
-            return
 
-        statistics = user.get("statistics") or {}
+            embed.set_footer(
+                text="Only authorize the official osu!Romania application."
+            )
 
-        with sqlite3.connect(
-            DATABASE_PATH
-        ) as connection:
+            await interaction.response.send_message(
+                embed=embed,
+                view=view,
+                ephemeral=True,
+            )
+
+    @app_commands.command(
+        name="unlink",
+        description="Unlink your osu! account."
+    )
+    async def unlink(
+        self,
+        interaction: discord.Interaction
+    ):
+        user = interaction.user
+
+        with sqlite3.connect(DATABASE_PATH) as connection:
             cursor = connection.cursor()
+
+            result = cursor.execute(
+                """
+                SELECT osu_id
+                FROM osu_accounts
+                WHERE discord_id = ?
+                """,
+                (user.id,)
+            ).fetchone()
+
+            if result is None:
+                await interaction.response.send_message(
+                    "You don't have a linked osu! account.",
+                    ephemeral=True
+                )
+                return
 
             cursor.execute(
                 """
-                INSERT OR REPLACE INTO osu_accounts (
-                    discord_id,
-                    osu_id,
-                    osu_username,
-                    pp,
-                    global_rank,
-                    country_rank,
-                    accuracy,
-                    avatar_url,
-                    country_code,
-                    last_updated
-                )
-                VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    datetime('now')
-                )
+                DELETE FROM osu_accounts
+                WHERE discord_id = ?
                 """,
-                (
-                    interaction.user.id,
-                    user["id"],
-                    user["username"],
-                    statistics.get("pp"),
-                    statistics.get("global_rank"),
-                    statistics.get("country_rank"),
-                    statistics.get("hit_accuracy"),
-                    user.get("avatar_url"),
-                    user.get("country_code"),
-                ),
+                (user.id,)
             )
 
-        embed = EmbedFactory.success(
-            "Account Linked",
-            (
-                f"Discord: {interaction.user.mention}\n"
-                f"osu!: **{user['username']}**"
-            ),
-        )
+            connection.commit()
 
-        await interaction.followup.send(
-            embed=embed
-        )
+        if isinstance(user, discord.Member):
+            # Remove Member role
+            member_role = interaction.guild.get_role(MEMBER_ROLE_ID)
 
+            if member_role and member_role in user.roles:
+                try:
+                    await user.remove_roles(
+                        member_role,
+                        reason="osu! account unlinked"
+                    )
+                except discord.Forbidden:
+                    pass
+
+            # Remove rank role
+            await RankRoleService.update_member(
+                user,
+                None
+            )
+
+        await interaction.response.send_message(
+            "Your osu! account has been unlinked successfully.",
+            ephemeral=True
+        )
     # --------------------------------------------------
     # PROFILE
     # --------------------------------------------------
@@ -109,22 +200,23 @@ class Profile(commands.Cog):
         description="View an osu! profile.",
     )
     @app_commands.describe(
-        username=(
-            "The osu! username to view. "
-            "Leave empty to view your linked account."
-        ),
+        username="The osu! username to view.",
+        member="View the linked osu! account of a Discord member."
     )
+
     async def profile(
         self,
         interaction: discord.Interaction,
         username: str | None = None,
+        member: discord.Member | None = None,
     ) -> None:
         await interaction.response.defer()
 
         if username is None:
-            with sqlite3.connect(
-                DATABASE_PATH
-            ) as connection:
+
+            target = member or interaction.user
+
+            with sqlite3.connect(DATABASE_PATH) as connection:
                 cursor = connection.cursor()
 
                 cursor.execute(
@@ -133,23 +225,28 @@ class Profile(commands.Cog):
                     FROM osu_accounts
                     WHERE discord_id = ?
                     """,
-                    (interaction.user.id,),
+                    (target.id,),
                 )
 
                 row = cursor.fetchone()
 
             if row is None:
+
+                if member is None:
+                    message = (
+                        "Use `/link` first or specify an osu! username."
+                    )
+                else:
+                    message = (
+                        f"**{member.display_name}** doesn't have a linked osu! account."
+                    )
+
                 embed = EmbedFactory.error(
                     "Account Not Linked",
-                    (
-                        "Use `/link <username>` first "
-                        "or specify a username."
-                    ),
+                    message,
                 )
 
-                await interaction.followup.send(
-                    embed=embed
-                )
+                await interaction.followup.send(embed=embed)
                 return
 
             osu_id = row[0]
@@ -182,6 +279,21 @@ class Profile(commands.Cog):
 
         user = await OsuAPI.get_user(osu_id)
 
+        county = None
+
+        with sqlite3.connect(DATABASE_PATH) as connection:
+            row = connection.execute(
+                """
+                SELECT county_name
+                FROM osu_counties
+                WHERE osu_id = ?
+                """,
+                (osu_id,)
+            ).fetchone()
+
+        if row:
+            county = row[0]
+
         if user is None:
             embed = EmbedFactory.error(
                 "Player Not Found",
@@ -196,7 +308,12 @@ class Profile(commands.Cog):
             )
             return
 
-        embed = OsuEmbed.profile(user)
+        county_data = CountyService.get_player_county(osu_id)
+
+        embed = OsuEmbed.profile(
+            user=user,
+            county=county_data
+        )
 
         view = ProfileView(
             author_id=interaction.user.id,
@@ -208,10 +325,139 @@ class Profile(commands.Cog):
             view=view,
         )
 
-
-async def setup(
-    bot: commands.Bot,
-) -> None:
-    await bot.add_cog(
-        Profile(bot)
+    @app_commands.command(
+        name="refresh-rank",
+        description="Refresh your osu! rank role.",
     )
+
+    @app_commands.checks.cooldown(
+        1,
+        60,
+        key=lambda interaction: interaction.user.id,
+    )
+
+    async def refresh_rank(
+        self,
+        interaction: discord.Interaction,
+    ) -> None:
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                embed=EmbedFactory.error(
+                    "Server Only",
+                    "Use this command inside the Discord server.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        with sqlite3.connect(DATABASE_PATH) as connection:
+            account = connection.execute(
+                """
+                SELECT osu_id
+                FROM osu_accounts
+                WHERE discord_id = ?
+                """,
+                (interaction.user.id,),
+            ).fetchone()
+
+        if account is None:
+            await interaction.followup.send(
+                embed=EmbedFactory.error(
+                    "Account Not Linked",
+                    "Use `/link` before refreshing your rank role.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        if not isinstance(interaction.user, discord.Member):
+            await interaction.followup.send(
+                embed=EmbedFactory.error(
+                    "Member Not Found",
+                    "Your Discord server member could not be loaded.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        osu_id = account[0]
+        osu_user = await OsuAPI.get_user(osu_id)
+
+        if osu_user is None:
+            await interaction.followup.send(
+                embed=EmbedFactory.error(
+                    "osu! API Error",
+                    "Your osu! profile could not be loaded. Try again later.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        statistics = osu_user.get("statistics") or {}
+        global_rank = statistics.get("global_rank")
+
+        if global_rank is None:
+            await interaction.followup.send(
+                embed=EmbedFactory.error(
+                    "No Global Rank",
+                    "Your osu! profile does not currently have a global rank.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        try:
+            changed = await RankRoleService.update_member(
+                interaction.user,
+                global_rank,
+            )
+
+        except discord.Forbidden:
+            await interaction.followup.send(
+                embed=EmbedFactory.error(
+                    "Missing Permissions",
+                    "I do not have permission to update your rank role.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        except discord.HTTPException as error:
+            print(
+                "[REFRESH RANK] Discord role update failed: "
+                f"{type(error).__name__}: {error}"
+            )
+
+            await interaction.followup.send(
+                embed=EmbedFactory.error(
+                    "Role Update Failed",
+                    "Discord rejected the role update. Try again later.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        if changed:
+            description = (
+                f"Your rank role has been updated.\n\n"
+                f"Current global rank: **#{global_rank:,}**"
+            )
+        else:
+            description = (
+                f"Your rank role is already correct.\n\n"
+                f"Current global rank: **#{global_rank:,}**"
+            )
+
+        await interaction.followup.send(
+            embed=EmbedFactory.success(
+                "Rank Role Refreshed",
+                description,
+            ),
+            ephemeral=True,
+        )
+
+
+async def setup(bot: commands.Bot) -> None:
+    await bot.add_cog(Profile(bot))

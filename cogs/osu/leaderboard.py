@@ -11,7 +11,6 @@ from views.leaderboard import ServerLeaderboardView
 
 DATABASE_PATH = Path("database/bot.db")
 
-
 class Leaderboard(commands.Cog):
     def __init__(
         self,

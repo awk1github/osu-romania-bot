@@ -2,12 +2,14 @@ import asyncio
 import json
 import logging
 import sqlite3
+import os
 
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from utils.osu_api import OsuAPI
 from utils.osu_score import format_mods, score_url
+from contextlib import closing
 
 import discord
 from discord.ext import commands, tasks
@@ -16,8 +18,16 @@ from discord import app_commands
 
 DATABASE_PATH = Path(__file__).resolve().parent.parent / "database" / "bot.db"
 
+
+
+print("DATABASE_PATH =", DATABASE_PATH)
+print("Exists:", DATABASE_PATH.exists())
+print("Parent exists:", DATABASE_PATH.parent.exists())
+print("Readable:", os.access(DATABASE_PATH, os.R_OK))
+print("Writable:", os.access(DATABASE_PATH, os.W_OK))
+
 CHECK_INTERVAL_MINUTES = 15
-REQUEST_DELAY_SECONDS = 1
+REQUEST_DELAY_SECONDS = 2
 
 PLAY_PP_MILESTONES = (
     100,
@@ -114,10 +124,12 @@ class Achievements(commands.Cog):
         self.check_achievements.cancel()
 
     async def fetch_profile(self, osu_id: int) -> dict[str, Any]:
-        return await OsuAPI.get_user(osu_id)
+        user = await OsuAPI.get_user(osu_id)
+        return user
 
     async def fetch_top_10(self, osu_id: int) -> list[dict[str, Any]]:
-        return await OsuAPI.get_top(osu_id, limit=5)
+        top = await OsuAPI.get_top(osu_id, limit=5)
+        return top
     
     def build_test_achievement_embed(
         self,
@@ -216,6 +228,10 @@ class Achievements(commands.Cog):
         return embed
     
     @app_commands.checks.has_permissions(administrator=True)
+    #@app_commands.command(
+    #    name="test-achivement",
+    #    description="test the embed"
+    #)
     async def test_achievement(
             self,
             interaction: discord.Interaction,
@@ -307,11 +323,25 @@ class Achievements(commands.Cog):
             ephemeral=True,
         )
 
+    @staticmethod
+    def get_score_id(score: dict[str, Any]) -> int | None:
+        raw_id = (
+            score.get("legacy_score_id")
+            or score.get("id")
+        )
+
+        try:
+            return int(raw_id)
+        except (TypeError, ValueError):
+            return None
+
     def get_guild_achievement_channel(
         self,
         guild_id: int,
     ) -> int | None:
-        with sqlite3.connect(DATABASE_PATH) as connection:
+        with closing(
+            sqlite3.connect(DATABASE_PATH, timeout=15.0)
+        ) as connection:
             row = connection.execute(
                 """
                 SELECT achievement_channel_id
@@ -349,7 +379,15 @@ class Achievements(commands.Cog):
                 await self.check_user(linked_user)
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as e:
+                import traceback
+
+                print("=" * 80)
+                print("DATABASE_PATH:", DATABASE_PATH)
+                print("Exception:", repr(e))
+                traceback.print_exc()
+                print("=" * 80)
+
                 logger.exception(
                     "Failed to check achievements for osu! user %s.",
                     linked_user.osu_id,
@@ -369,10 +407,8 @@ class Achievements(commands.Cog):
         )
 
     async def check_user(self, linked_user: LinkedUser) -> None:
-        profile, top_scores = await asyncio.gather(
-            self.fetch_profile(linked_user.osu_id),
-            self.fetch_top_10(linked_user.osu_id),
-        )
+        print(f"Checking {linked_user.osu_username}")
+        profile = await self.fetch_profile(linked_user.osu_id)
 
         if not profile:
             logger.warning(
@@ -381,8 +417,7 @@ class Achievements(commands.Cog):
             )
             return
 
-        if top_scores is None:
-            top_scores = []
+        top_scores = await self.fetch_top_10(linked_user.osu_id)
 
         current_snapshot = self.build_snapshot(
             osu_id=linked_user.osu_id,
@@ -426,7 +461,7 @@ class Achievements(commands.Cog):
 
             if not was_created:
                 continue
-
+            
             await self.send_achievement(
                 discord_id=linked_user.discord_id,
                 embed=achievement.embed,
@@ -442,6 +477,7 @@ class Achievements(commands.Cog):
     # ------------------------------------------------------------------
 
     def detect_achievements(
+
         self,
         linked_user: LinkedUser,
         profile: dict[str, Any],
@@ -493,7 +529,8 @@ class Achievements(commands.Cog):
         old_score_ids = set(old.top_10_ids)
 
         for position, score in enumerate(top_scores[:5], start=1):
-            score_id = self.to_int(score.get("id"))
+            score_id = self.get_score_id(score)
+
 
             if score_id is None or score_id in old_score_ids:
                 continue
@@ -963,10 +1000,10 @@ class Achievements(commands.Cog):
 
         top_score = top_scores[0] if top_scores else {}
 
-        top_10_ids = [
+        top_score_ids = [
             score_id
-            for score in top_scores[:5]
-            if (score_id := self.to_int(score.get("id"))) is not None
+            for score in top_scores
+            if (score_id := self.get_score_id(score)) is not None
         ]
 
         return Snapshot(
@@ -974,13 +1011,17 @@ class Achievements(commands.Cog):
             total_pp=self.to_float(statistics.get("pp")),
             global_rank=self.to_int(statistics.get("global_rank")),
             country_rank=self.to_int(statistics.get("country_rank")),
-            top_score_id=self.to_int(top_score.get("id")),
+            top_score_id=self.get_score_id(top_score),
             top_score_pp=self.to_float(top_score.get("pp")),
-            top_10_ids=top_10_ids,
+            top_10_ids=top_score_ids,
         )
 
+    print("Opening:", DATABASE_PATH)
+
     def get_snapshot(self, osu_id: int) -> Snapshot | None:
-        with sqlite3.connect(DATABASE_PATH) as connection:
+        with closing(
+            sqlite3.connect(DATABASE_PATH, timeout=15.0)
+        ) as connection:
             connection.row_factory = sqlite3.Row
 
             row = connection.execute(
@@ -1022,7 +1063,9 @@ class Achievements(commands.Cog):
         )
 
     def save_snapshot(self, snapshot: Snapshot) -> None:
-        with sqlite3.connect(DATABASE_PATH) as connection:
+        with closing(
+            sqlite3.connect(DATABASE_PATH, timeout=15.0)
+        ) as connection:
             connection.execute(
                 """
                 INSERT INTO achievement_snapshots (
@@ -1065,7 +1108,9 @@ class Achievements(commands.Cog):
     # ------------------------------------------------------------------
 
     def get_linked_users(self) -> list[LinkedUser]:
-        with sqlite3.connect(DATABASE_PATH) as connection:
+        with closing(
+            sqlite3.connect(DATABASE_PATH, timeout=15.0)
+        ) as connection:
             connection.row_factory = sqlite3.Row
 
             rows = connection.execute(
@@ -1089,7 +1134,9 @@ class Achievements(commands.Cog):
         ]
 
     def get_achievement_channels(self) -> list[tuple[int, int]]:
-        with sqlite3.connect(DATABASE_PATH) as connection:
+        with closing(
+            sqlite3.connect(DATABASE_PATH, timeout=15.0)
+        ) as connection:
             rows = connection.execute(
                 """
                 SELECT
@@ -1113,7 +1160,9 @@ class Achievements(commands.Cog):
         event_key: str,
     ) -> bool:
         try:
-            with sqlite3.connect(DATABASE_PATH) as connection:
+            with closing(
+                sqlite3.connect(DATABASE_PATH, timeout=15.0)
+            ) as connection:
                 connection.execute(
                     """
                     INSERT INTO achievement_events (

@@ -5,13 +5,13 @@ import asyncio
 import discord
 from discord.ext import commands
 from discord import app_commands
-
-import database.init_db
+from utils.oauth_server import OAuthServer
+from utils.osu_api import OsuAPI
 
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
-GUILD_ID = 1473125019692564542
+GUILD_ID = int(os.getenv("GUILD_ID"))
 
 intents = discord.Intents.default()
 intents.members = True
@@ -21,7 +21,7 @@ intents.message_content = True
 class OsuRomania(commands.Bot):
     def __init__(self):
         super().__init__(
-            command_prefix="!",
+            command_prefix="<",
             intents=intents
         )
 
@@ -33,16 +33,19 @@ class OsuRomania(commands.Bot):
             "cogs.achievements",
             "cogs.server_settings",
             "cogs.county",
+            "cogs.help",
             "cogs.osu.profile",
             "cogs.osu.scores",
             "cogs.osu.leaderboard",
             "cogs.osu.listeners",
-            
+            "cogs.osu.chat_commands",
         ]
 
         for extension in extensions:
             await self.load_extension(extension)
             print(f"✓ Loaded {extension}")
+
+        await OAuthServer.start(self)
 
         guild = discord.Object(id=GUILD_ID)
 
@@ -56,6 +59,10 @@ class OsuRomania(commands.Bot):
         print(f"Guilds: {len(self.guilds)}")
         print(f"Cogs Loaded: {len(self.cogs)}")
         print("-" * 40)
+
+    async def close(self) -> None:
+            await OsuAPI.close_session()
+            await super().close()
 
 
 bot = OsuRomania()
