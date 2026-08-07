@@ -134,7 +134,10 @@ class ChatCommands(commands.Cog):
                 if osu_id is None or profile is None:
                     return
 
-                score = await OsuAPI.get_recent(osu_id)
+                score = await OsuAPI.get_recent(
+                    osu_id,
+                    include_fails=True,
+                )
 
                 if score is None:
                     await message.reply(
@@ -192,7 +195,15 @@ class ChatCommands(commands.Cog):
                     )
                     score["user"] = profile
 
-                embed = ScoreEmbed.recent(score)
+                local_pp, fc_pp = await OsuAPI.calculate_pp_values(score)
+
+                if score.get("pp") is None and local_pp is not None:
+                    score["pp"] = local_pp
+
+                embed = ScoreEmbed.recent(
+                    score,
+                    fc_pp=fc_pp,
+                )
 
                 await message.reply(
                     embed=embed,

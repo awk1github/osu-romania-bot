@@ -1,7 +1,5 @@
 import sqlite3
 import discord
-import asyncio
-import json
 import os
 
 from discord.ext import commands
@@ -79,7 +77,7 @@ class Scores(commands.Cog):
                 osu_id = user["id"]
 
             profile = await OsuAPI.get_user(osu_id)
-            score = await OsuAPI.get_recent(osu_id)
+            score = await OsuAPI.get_recent(osu_id, include_fails=True)
 
             if score is None:
                 embed = EmbedFactory.info(
@@ -125,12 +123,26 @@ class Scores(commands.Cog):
             if profile is not None:
                 score["user"] = profile
 
-            fc_pp = await OsuAPI.calculate_fc_pp(json.dumps(score))
-            # print("FC PP:", fc_pp)
-            # print("Mods:", score.get("mods"))
-            # print("Accuracy:", score.get("accuracy"))
+            if not score.get("beatmap") or not score.get("beatmapset"):
+                score = await OsuAPI.enrich_score(
+                    score,
+                    include_user=False,
+                    include_beatmap=True,
+                    include_beatmapset=True,
+                )
+
+                if profile is not None:
+                    score["user"] = profile
+
+            local_pp, fc_pp = await OsuAPI.calculate_pp_values(score)
+
+            # osu! does not always return PP for unranked/loved maps.
+            # Use the local rosu-pp calculation as a fallback.
+            if score.get("pp") is None and local_pp is not None:
+                score["pp"] = local_pp
 
             embed = ScoreEmbed.recent(score, fc_pp=fc_pp)
+
             await interaction.followup.send(embed=embed)
 
         except Exception as error:

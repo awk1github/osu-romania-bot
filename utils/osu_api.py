@@ -371,45 +371,134 @@ class OsuAPI:
         return data
 
     @staticmethod
-    async def calculate_fc_pp(score) -> float | None:
-        # beatmap = score.get("beatmap") or {}
+    async def calculate_pp_values(
+        score: dict[str, Any],
+    ) -> tuple[float | None, float | None]:
+        """
+        Calculate:
+        1. PP for the actual play.
+        2. PP if the play was FC'd at the same accuracy.
 
-        req = json.loads(score)
-        beatmap_id = req["beatmap"]["id"]
+        This allows PP to be displayed even when osu!'s API doesn't
+        provide PP, such as on unranked/loved maps.
+        """
+        beatmap = score.get("beatmap") or {}
+        beatmap_id = beatmap.get("id") or score.get("beatmap_id")
 
         if beatmap_id is None:
-            return None
+            return None, None
 
-        beatmap_bytes = await OsuAPI.get_beatmap_file(beatmap_id)
-
+        beatmap_bytes = await OsuAPI.get_beatmap_file(int(beatmap_id))
         if beatmap_bytes is None:
-            return None
+            return None, None
 
-        def calculate():
-            beatmap = rosu_pp_py.Beatmap(bytes=beatmap_bytes)
+        mods = score.get("mods") or []
 
-            mods = json.dumps(req["mods"])
+        mod_acronyms: set[str] = set()
 
-            lazer = False
-            if mods.find("CL") == False:
-                lazer = True
+        for mod in mods:
+            if isinstance(mod, str):
+                mod_acronyms.add(mod.upper())
 
-            performance = rosu_pp_py.Performance(
-                mods=mods,
-                accuracy=100, # (req["accuracy"] or 0) * 100
-                combo=req["beatmap"]["max_combo"],
-                lazer=lazer,
+            elif isinstance(mod, dict):
+                acronym = mod.get("acronym")
+
+                if acronym:
+                    mod_acronyms.add(str(acronym).upper())
+
+        # Classic/stable scores contain CL.
+        # Scores without CL use lazer scoring.
+        lazer = "CL" not in mod_acronyms
+
+        try:
+            accuracy = float(score.get("accuracy") or 0.0) * 100.0
+        except (TypeError, ValueError):
+            accuracy = 0.0
+
+        accuracy = max(0.0, min(100.0, accuracy))
+
+        statistics = score.get("statistics") or {}
+
+        misses = statistics.get("miss")
+
+        if misses is None:
+            misses = statistics.get("count_miss", 0)
+
+        try:
+            misses = int(misses or 0)
+        except (TypeError, ValueError):
+            misses = 0
+
+        combo = score.get("max_combo")
+
+        if combo is None:
+            combo = score.get("maximum_combo")
+
+        try:
+            combo = int(combo) if combo is not None else None
+        except (TypeError, ValueError):
+            combo = None
+
+        def calculate() -> tuple[float | None, float | None]:
+            parsed_map = rosu_pp_py.Beatmap(bytes=beatmap_bytes)
+
+            if parsed_map.is_suspicious():
+                return None, None
+
+            common = {
+                "mods": mods,
+                "accuracy": accuracy,
+                "lazer": lazer,
+                "hitresult_priority": (
+                    rosu_pp_py.HitResultPriority.BestCase
+                ),
+            }
+
+            current_args = {
+                **common,
+                "misses": misses,
+            }
+
+            if combo is not None:
+                current_args["combo"] = combo
+
+            current_pp = rosu_pp_py.Performance(
+                **current_args,
+            ).calculate(parsed_map).pp
+
+            # IF FC:
+            # Keep the score's accuracy + mods,
+            # remove misses,
+            # and let rosu use full map combo.
+            fc_pp = rosu_pp_py.Performance(
+                **common,
                 misses=0,
-                hitresult_priority=rosu_pp_py.HitResultPriority.BestCase,
-            )
-            
-            return performance.calculate(beatmap).pp
+            ).calculate(parsed_map).pp
+
+            return current_pp, fc_pp
 
         try:
             return await asyncio.to_thread(calculate)
-        except Exception as e:
-            print(f"FC PP calculation failed: {e!r}")
-            return None
+
+        except Exception:
+            logger.exception(
+                "PP calculation failed for beatmap %s",
+                beatmap_id,
+            )
+
+            return None, None
+
+    @staticmethod
+    async def calculate_fc_pp(score) -> float | None:
+        """
+        Compatibility wrapper for existing callers.
+        """
+        if isinstance(score, str):
+            score = json.loads(score)
+
+        _, fc_pp = await OsuAPI.calculate_pp_values(score)
+
+        return fc_pp
 
     # BEATMAPS
 

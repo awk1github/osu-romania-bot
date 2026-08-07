@@ -31,7 +31,10 @@ class ScoreEmbed:
         return f"{minutes}:{remaining:02d}"
 
     @staticmethod
-    def recent(score: dict[str, Any], fc_pp) -> discord.Embed:
+    def recent(
+        score: dict[str, Any],
+        fc_pp: float | None = None,
+    ) -> discord.Embed:
         beatmap = score.get("beatmap") or {}
         beatmapset = score.get("beatmapset") or {}
         user = score.get("user") or {}
@@ -122,11 +125,17 @@ class ScoreEmbed:
 
         pp_value = score.get("pp")
 
-        pp_text = (
-            f"{ScoreEmbed._float(pp_value):.2f}pp/{ScoreEmbed._float(fc_pp):.2f}pp"
-            if pp_value is not None
-            else "Unranked"
-        )
+        if pp_value is not None and fc_pp is not None:
+            pp_text = (
+                f"{ScoreEmbed._float(pp_value):.2f}pp/"
+                f"{ScoreEmbed._float(fc_pp):.2f}pp"
+            )
+        elif pp_value is not None:
+            pp_text = f"{ScoreEmbed._float(pp_value):.2f}pp"
+        elif fc_pp is not None:
+            pp_text = f"IF FC {ScoreEmbed._float(fc_pp):.2f}pp"
+        else:
+            pp_text = "PP unavailable"
 
         accuracy = ScoreEmbed._float(score.get("accuracy")) * 100
         time_value = played_at(score)
