@@ -134,14 +134,18 @@ class Scores(commands.Cog):
                 if profile is not None:
                     score["user"] = profile
 
-            local_pp, fc_pp = await OsuAPI.calculate_pp_values(score)
+            local_pp, fc_pp, ss_pp = await OsuAPI.calculate_pp_values(score)
 
             # osu! does not always return PP for unranked/loved maps.
             # Use the local rosu-pp calculation as a fallback.
             if score.get("pp") is None and local_pp is not None:
                 score["pp"] = local_pp
 
-            embed = ScoreEmbed.recent(score, fc_pp=fc_pp)
+            embed = ScoreEmbed.recent(
+                score,
+                fc_pp=fc_pp,
+                ss_pp=ss_pp,
+            )
 
             await interaction.followup.send(embed=embed)
 

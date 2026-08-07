@@ -373,7 +373,7 @@ class OsuAPI:
     @staticmethod
     async def calculate_pp_values(
         score: dict[str, Any],
-    ) -> tuple[float | None, float | None]:
+    ) -> tuple[float | None, float | None, float | None]:
         """
         Calculate:
         1. PP for the actual play.
@@ -386,11 +386,11 @@ class OsuAPI:
         beatmap_id = beatmap.get("id") or score.get("beatmap_id")
 
         if beatmap_id is None:
-            return None, None
+            return None, None, None
 
         beatmap_bytes = await OsuAPI.get_beatmap_file(int(beatmap_id))
         if beatmap_bytes is None:
-            return None, None
+            return None, None, None
 
         mods = score.get("mods") or []
 
@@ -419,15 +419,22 @@ class OsuAPI:
 
         statistics = score.get("statistics") or {}
 
-        misses = statistics.get("miss")
+        def get_stat(*names: str) -> int:
+            for name in names:
+                value = statistics.get(name)
 
-        if misses is None:
-            misses = statistics.get("count_miss", 0)
+                if value is not None:
+                    try:
+                        return int(value)
+                    except (TypeError, ValueError):
+                        return 0
 
-        try:
-            misses = int(misses or 0)
-        except (TypeError, ValueError):
-            misses = 0
+            return 0
+
+        n300 = get_stat("great", "count_300")
+        n100 = get_stat("ok", "count_100")
+        n50 = get_stat("meh", "count_50")
+        misses = get_stat("miss", "count_miss")
 
         combo = score.get("max_combo")
 
@@ -443,11 +450,10 @@ class OsuAPI:
             parsed_map = rosu_pp_py.Beatmap(bytes=beatmap_bytes)
 
             if parsed_map.is_suspicious():
-                return None, None
+                return None, None, None
 
             common = {
                 "mods": mods,
-                "accuracy": accuracy,
                 "lazer": lazer,
                 "hitresult_priority": (
                     rosu_pp_py.HitResultPriority.BestCase
@@ -456,6 +462,9 @@ class OsuAPI:
 
             current_args = {
                 **common,
+                "n300": n300,
+                "n100": n100,
+                "n50": n50,
                 "misses": misses,
             }
 
@@ -466,16 +475,35 @@ class OsuAPI:
                 **current_args,
             ).calculate(parsed_map).pp
 
+
             # IF FC:
-            # Keep the score's accuracy + mods,
-            # remove misses,
-            # and let rosu use full map combo.
+            # Treat every miss as a 300 while preserving the existing
+            # 100s and 50s. This also naturally recalculates accuracy.
+            fc_n300 = n300 + misses
+
             fc_pp = rosu_pp_py.Performance(
-                **common,
+                mods=mods,
+                n300=fc_n300,
+                n100=n100,
+                n50=n50,
                 misses=0,
+                lazer=lazer,
+                hitresult_priority=(
+                    rosu_pp_py.HitResultPriority.BestCase
+                ),
             ).calculate(parsed_map).pp
 
-            return current_pp, fc_pp
+            ss_pp = rosu_pp_py.Performance(
+                mods=mods,
+                accuracy=100.0,
+                misses=0,
+                lazer=lazer,
+                hitresult_priority=(
+                    rosu_pp_py.HitResultPriority.BestCase
+                ),
+            ).calculate(parsed_map).pp
+
+            return current_pp, fc_pp, ss_pp
 
         try:
             return await asyncio.to_thread(calculate)
@@ -486,7 +514,7 @@ class OsuAPI:
                 beatmap_id,
             )
 
-            return None, None
+            return None, None, None
 
     @staticmethod
     async def calculate_fc_pp(score) -> float | None:
@@ -496,7 +524,7 @@ class OsuAPI:
         if isinstance(score, str):
             score = json.loads(score)
 
-        _, fc_pp = await OsuAPI.calculate_pp_values(score)
+        _, fc_pp, _ = await OsuAPI.calculate_pp_values(score)
 
         return fc_pp
 

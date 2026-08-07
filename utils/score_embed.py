@@ -34,6 +34,7 @@ class ScoreEmbed:
     def recent(
         score: dict[str, Any],
         fc_pp: float | None = None,
+        ss_pp: float | None = None,
     ) -> discord.Embed:
         beatmap = score.get("beatmap") or {}
         beatmapset = score.get("beatmapset") or {}
@@ -125,15 +126,38 @@ class ScoreEmbed:
 
         pp_value = score.get("pp")
 
-        if pp_value is not None and fc_pp is not None:
-            pp_text = (
-                f"{ScoreEmbed._float(pp_value):.2f}pp/"
-                f"{ScoreEmbed._float(fc_pp):.2f}pp"
-            )
-        elif pp_value is not None:
-            pp_text = f"{ScoreEmbed._float(pp_value):.2f}pp"
-        elif fc_pp is not None:
-            pp_text = f"IF FC {ScoreEmbed._float(fc_pp):.2f}pp"
+        if pp_value is not None:
+            pp_parts = [
+                f"{ScoreEmbed._float(pp_value):.2f}pp"
+            ]
+
+            if fc_pp is not None:
+                pp_parts.append(
+                    f"{ScoreEmbed._float(fc_pp):.2f}pp (--IF FC--)"
+                )
+
+            if ss_pp is not None:
+                pp_parts.append(
+                    f"{ScoreEmbed._float(ss_pp):.2f}pp (--SS--)"
+                )
+
+            pp_text = " / ".join(pp_parts)
+
+        elif fc_pp is not None or ss_pp is not None:
+            pp_parts = []
+
+            if fc_pp is not None:
+                pp_parts.append(
+                    f"{ScoreEmbed._float(fc_pp):.2f}pp (--IF FC--)"
+                )
+
+            if ss_pp is not None:
+                pp_parts.append(
+                    f"{ScoreEmbed._float(ss_pp):.2f}pp (--SS--)"
+                )
+
+            pp_text = " / ".join(pp_parts)
+
         else:
             pp_text = "PP unavailable"
 
