@@ -371,51 +371,89 @@ class OsuAPI:
         return data
 
     @staticmethod
-    async def calculate_pp_values(
-        score: dict[str, Any],
-    ) -> tuple[float | None, float | None, float | None]:
-        """
-        Calculate:
-        1. PP for the actual play.
-        2. PP if the play was FC'd at the same accuracy.
+    def normalize_mods(mods: Any) -> list[dict[str, Any]]:
+        """Return mods as [{"acronym": "DT", "settings": {...}}, ...]."""
 
-        This allows PP to be displayed even when osu!'s API doesn't
-        provide PP, such as on unranked/loved maps.
+        normalized: list[dict[str, Any]] = []
+
+        for mod in mods or []:
+            if isinstance(mod, str):
+                normalized.append({"acronym": mod.upper()})
+
+            elif isinstance(mod, dict) and mod.get("acronym"):
+                item: dict[str, Any] = {
+                    "acronym": str(mod["acronym"]).upper()
+                }
+                settings = mod.get("settings")
+
+                if isinstance(settings, dict) and settings:
+                    item["settings"] = settings
+
+                normalized.append(item)
+
+        return normalized
+
+    @staticmethod
+    def get_clock_rate(mods: list[dict[str, Any]]) -> float:
+        """
+        Speed multiplier of the play.
+
+        DT/NC default to 1.5 and HT/DC to 0.75, but lazer lets the player
+        pick a custom rate, which is stored in the mod's `speed_change`.
+        """
+
+        rate = 1.0
+
+        for mod in mods:
+            acronym = mod["acronym"]
+
+            if acronym in ("DT", "NC"):
+                rate = 1.5
+            elif acronym in ("HT", "DC"):
+                rate = 0.75
+            else:
+                continue
+
+            custom = (mod.get("settings") or {}).get("speed_change")
+
+            try:
+                if custom is not None:
+                    rate = float(custom)
+            except (TypeError, ValueError):
+                pass
+
+        return max(0.5, min(2.0, rate))
+
+    @staticmethod
+    async def calculate_play_stats(
+        score: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """
+        Calculate everything the embed needs, with the real mods and
+        clock rate applied:
+
+        pp, fc_pp, ss_pp, stars, ar, od, cs, hp, bpm, clock_rate
+
+        The result is also stored in score["_calc"] so the embed can pick
+        it up without changing the callers.
         """
         beatmap = score.get("beatmap") or {}
         beatmap_id = beatmap.get("id") or score.get("beatmap_id")
 
         if beatmap_id is None:
-            return None, None, None
+            return None
 
         beatmap_bytes = await OsuAPI.get_beatmap_file(int(beatmap_id))
         if beatmap_bytes is None:
-            return None, None, None
+            return None
 
-        mods = score.get("mods") or []
-
-        mod_acronyms: set[str] = set()
-
-        for mod in mods:
-            if isinstance(mod, str):
-                mod_acronyms.add(mod.upper())
-
-            elif isinstance(mod, dict):
-                acronym = mod.get("acronym")
-
-                if acronym:
-                    mod_acronyms.add(str(acronym).upper())
+        mods = OsuAPI.normalize_mods(score.get("mods"))
+        acronyms = {mod["acronym"] for mod in mods}
+        clock_rate = OsuAPI.get_clock_rate(mods)
 
         # Classic/stable scores contain CL.
         # Scores without CL use lazer scoring.
-        lazer = "CL" not in mod_acronyms
-
-        try:
-            accuracy = float(score.get("accuracy") or 0.0) * 100.0
-        except (TypeError, ValueError):
-            accuracy = 0.0
-
-        accuracy = max(0.0, min(100.0, accuracy))
+        lazer = "CL" not in acronyms
 
         statistics = score.get("statistics") or {}
 
@@ -446,22 +484,71 @@ class OsuAPI:
         except (TypeError, ValueError):
             combo = None
 
-        def calculate() -> tuple[float | None, float | None]:
+        # Lazer slider information (only meaningful with lazer scoring).
+        slider_extras: dict[str, int] = {}
+
+        if lazer:
+            large_ticks = statistics.get("large_tick_hit")
+            slider_ends = statistics.get("slider_tail_hit")
+
+            if large_ticks is not None:
+                slider_extras["large_tick_hits"] = int(large_ticks)
+
+            if slider_ends is not None:
+                slider_extras["slider_end_hits"] = int(slider_ends)
+
+        api_bpm = beatmap.get("bpm")
+
+        def calculate() -> dict[str, Any] | None:
             parsed_map = rosu_pp_py.Beatmap(bytes=beatmap_bytes)
 
             if parsed_map.is_suspicious():
-                return None, None, None
+                return None
 
-            common = {
-                "mods": mods,
-                "lazer": lazer,
-                "hitresult_priority": (
-                    rosu_pp_py.HitResultPriority.BestCase
-                ),
-            }
+            priority = rosu_pp_py.HitResultPriority.BestCase
 
-            current_args = {
-                **common,
+            def build(cls, required: dict, optional: dict | None = None):
+                # Optional kwargs may not exist in every rosu-pp-py
+                # version, so fall back to the required ones.
+                try:
+                    return cls(**required, **(optional or {}))
+                except TypeError:
+                    logger.warning(
+                        "%s rejected %s, retrying without them.",
+                        cls.__name__,
+                        list((optional or {}).keys()),
+                    )
+                    return cls(**required)
+
+            def performance(optional: dict | None = None, **counts):
+                return build(
+                    rosu_pp_py.Performance,
+                    {
+                        "mods": mods,
+                        "clock_rate": clock_rate,
+                        "lazer": lazer,
+                        "hitresult_priority": priority,
+                        **counts,
+                    },
+                    optional,
+                )
+
+            # Difficulty with the real mods + clock rate.
+            difficulty = build(
+                rosu_pp_py.Difficulty,
+                {"mods": mods, "clock_rate": clock_rate},
+                {"lazer": lazer},
+            ).calculate(parsed_map)
+
+            # AR/OD/CS/HP after DT/HT/EZ/HR and the clock rate.
+            attributes = rosu_pp_py.BeatmapAttributesBuilder(
+                map=parsed_map,
+                mods=mods,
+                clock_rate=clock_rate,
+            ).build()
+
+            # Actual play.
+            current_counts: dict[str, Any] = {
                 "n300": n300,
                 "n100": n100,
                 "n50": n50,
@@ -469,52 +556,90 @@ class OsuAPI:
             }
 
             if combo is not None:
-                current_args["combo"] = combo
+                current_counts["combo"] = combo
 
-            current_pp = rosu_pp_py.Performance(
-                **current_args,
+            current_pp = performance(
+                slider_extras, **current_counts
             ).calculate(parsed_map).pp
 
-
-            # IF FC:
-            # Treat every miss as a 300 while preserving the existing
-            # 100s and 50s. This also naturally recalculates accuracy.
-            fc_n300 = n300 + misses
-
-            fc_pp = rosu_pp_py.Performance(
-                mods=mods,
-                n300=fc_n300,
+            # IF FC: every miss becomes a 300, 100s/50s are kept and the
+            # combo defaults to the map's max combo.
+            fc_pp = performance(
+                slider_extras,
+                n300=n300 + misses,
                 n100=n100,
                 n50=n50,
                 misses=0,
-                lazer=lazer,
-                hitresult_priority=(
-                    rosu_pp_py.HitResultPriority.BestCase
-                ),
             ).calculate(parsed_map).pp
 
-            ss_pp = rosu_pp_py.Performance(
-                mods=mods,
+            # SS.
+            ss_pp = performance(
                 accuracy=100.0,
                 misses=0,
-                lazer=lazer,
-                hitresult_priority=(
-                    rosu_pp_py.HitResultPriority.BestCase
-                ),
             ).calculate(parsed_map).pp
 
-            return current_pp, fc_pp, ss_pp
+            base_bpm = getattr(parsed_map, "bpm", None) or api_bpm
+
+            try:
+                bpm = float(base_bpm) * clock_rate
+            except (TypeError, ValueError):
+                bpm = None
+
+            return {
+                "pp": current_pp,
+                "fc_pp": fc_pp,
+                "ss_pp": ss_pp,
+                "stars": difficulty.stars,
+                "ar": attributes.ar,
+                "od": attributes.od,
+                "cs": attributes.cs,
+                "hp": attributes.hp,
+                "bpm": bpm,
+                "clock_rate": clock_rate,
+            }
 
         try:
-            return await asyncio.to_thread(calculate)
+            stats = await asyncio.to_thread(calculate)
 
         except Exception:
             logger.exception(
                 "PP calculation failed for beatmap %s",
                 beatmap_id,
             )
+            return None
 
+        if stats is not None:
+            logger.debug(
+                "beatmap %s mods=%s rate=%.2f stars=%.2f pp=%.2f "
+                "fc=%.2f ss=%.2f",
+                beatmap_id,
+                [m["acronym"] for m in mods],
+                clock_rate,
+                stats["stars"],
+                stats["pp"],
+                stats["fc_pp"],
+                stats["ss_pp"],
+            )
+            score["_calc"] = stats
+
+        return stats
+
+    @staticmethod
+    async def calculate_pp_values(
+        score: dict[str, Any],
+    ) -> tuple[float | None, float | None, float | None]:
+        """
+        Returns (current_pp, fc_pp, ss_pp).
+
+        Kept for existing callers; it also fills score["_calc"] with the
+        DT-adjusted stats used by ScoreEmbed.recent().
+        """
+        stats = await OsuAPI.calculate_play_stats(score)
+
+        if stats is None:
             return None, None, None
+
+        return stats["pp"], stats["fc_pp"], stats["ss_pp"]
 
     @staticmethod
     async def calculate_fc_pp(score) -> float | None:

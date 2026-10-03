@@ -78,6 +78,22 @@ class ScoreEmbed:
         country_code = user.get("country_code") or "?"
         
         mods = format_mods(score)
+
+        # DT-adjusted values filled in by OsuAPI.calculate_pp_values()
+        calc = score.get("_calc") or {}
+        clock_rate = ScoreEmbed._float(calc.get("clock_rate"), 1.0) or 1.0
+
+        if "DT" in mod_acronyms or "NC" in mod_acronyms:
+            default_rate = 1.5
+        elif "HT" in mod_acronyms or "DC" in mod_acronyms:
+            default_rate = 0.75
+        else:
+            default_rate = 1.0
+
+        # Show lazer custom rates, e.g. "DT (1.2x)".
+        if abs(clock_rate - 1.0) > 1e-6 and abs(clock_rate - default_rate) > 1e-6:
+            mods = f"{mods} ({clock_rate:g}x)"
+
         misses = miss_count(score)
         rank = str(score.get("rank") or "F").upper()
         rank_emoji = RANK_EMOJIS.get(rank, rank)
@@ -95,13 +111,19 @@ class ScoreEmbed:
             )
 
         total_length = beatmap.get("total_length") or beatmap.get("hit_length")
-        length = ScoreEmbed._format_length(total_length)
+        length = ScoreEmbed._format_length(
+            round(ScoreEmbed._number(total_length) / clock_rate)
+        )
 
-        cs = ScoreEmbed._float(beatmap.get("cs"))
-        ar = ScoreEmbed._float(beatmap.get("ar"))
-        od = ScoreEmbed._float(beatmap.get("accuracy"))
-        hp = ScoreEmbed._float(beatmap.get("drain"))
-        bpm = ScoreEmbed._float(beatmap.get("bpm"))
+        def stat(key: str, fallback: Any) -> float:
+            value = calc.get(key)
+            return ScoreEmbed._float(value if value is not None else fallback)
+
+        cs = stat("cs", beatmap.get("cs"))
+        ar = stat("ar", beatmap.get("ar"))
+        od = stat("od", beatmap.get("accuracy"))
+        hp = stat("hp", beatmap.get("drain"))
+        bpm = stat("bpm", beatmap.get("bpm"))
 
         mapper = beatmapset.get("creator") or "Unknown mapper"
 
@@ -125,6 +147,20 @@ class ScoreEmbed:
                 pass
 
         pp_value = score.get("pp")
+
+        # Safety net: IF FC / SS can never be lower than the actual pp.
+        if pp_value is not None:
+            actual_pp = ScoreEmbed._float(pp_value)
+
+            if fc_pp is not None:
+                fc_pp = max(ScoreEmbed._float(fc_pp), actual_pp)
+
+            if ss_pp is not None:
+                ss_pp = max(
+                    ScoreEmbed._float(ss_pp),
+                    actual_pp,
+                    ScoreEmbed._float(fc_pp),
+                )
 
         if pp_value is not None:
             pp_text = f"{ScoreEmbed._float(pp_value):.2f}pp"
@@ -171,7 +207,7 @@ class ScoreEmbed:
         artist = beatmapset.get("artist") or "Unknown artist"
         title = beatmapset.get("title") or "Unknown title"
         version = beatmap.get("version") or "Unknown difficulty"
-        stars = ScoreEmbed._float(beatmap.get("difficulty_rating"))
+        stars = stat("stars", beatmap.get("difficulty_rating"))
 
         beatmap_id = beatmap.get("id") or score.get("beatmap_id")
         beatmap_url = beatmap.get("url")
